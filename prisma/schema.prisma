@@ -1,0 +1,170 @@
+// ТОВ «СТАН КОМПЛЕКТ» — сервісна служба
+// Схема даних. Часовий пояс застосунку: Europe/Kyiv.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN // керівник відділу
+  BRIGADE_LEADER // бригадир
+  VIEWER // директор (тільки перегляд)
+}
+
+enum Locale {
+  UK
+  RU
+}
+
+enum TaskStatus {
+  ASSIGNED // Призначено
+  CONFIRMED // Підтверджено бригадиром
+  EN_ROUTE // В дорозі
+  ON_SITE // На об'єкті
+  DONE // Виконано
+  NOT_DONE // Не виконано (з причиною)
+}
+
+enum LogSource {
+  WEB
+  TELEGRAM
+  SYSTEM
+}
+
+model User {
+  id             String    @id @default(cuid())
+  name           String
+  login          String    @unique
+  passwordHash   String
+  role           Role
+  locale         Locale    @default(UK)
+  brigadeId      String?
+  brigade        Brigade?  @relation(fields: [brigadeId], references: [id])
+  telegramChatId String?   @unique
+  tgLinkCode     String?   @unique
+  tgLinkExpires  DateTime?
+  isActive       Boolean   @default(true)
+
+  createdTasks Task[]          @relation("CreatedBy")
+  statusLogs   TaskStatusLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Brigade {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  users User[]
+  tasks Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id       String  @id @default(cuid())
+  name     String
+  city     String
+  oblast   String
+  contacts String?
+  note     String?
+
+  machines Machine[]
+  tasks    Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// Довідник типів обладнання (розширюваний без міграцій коду)
+model MachineType {
+  id     String @id @default(cuid())
+  nameUk String @unique
+  nameRu String
+
+  machines Machine[]
+}
+
+model Machine {
+  id           String      @id @default(cuid())
+  clientId     String
+  client       Client      @relation(fields: [clientId], references: [id])
+  typeId       String
+  type         MachineType @relation(fields: [typeId], references: [id])
+  model        String
+  serialNumber String?
+  note         String?
+
+  tasks Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+model Task {
+  id            String     @id @default(cuid())
+  brigadeId     String
+  brigade       Brigade    @relation(fields: [brigadeId], references: [id])
+  clientId      String
+  client        Client     @relation(fields: [clientId], references: [id])
+  machineId     String?
+  machine       Machine?   @relation(fields: [machineId], references: [id])
+  city          String
+  oblast        String
+  invoiceNumber String?
+  note          String?
+  dateFrom      DateTime   @db.Date
+  dateTo        DateTime   @db.Date
+  status        TaskStatus @default(ASSIGNED)
+  failureReason String? // обов'язкова при NOT_DONE
+  createdById   String
+  createdBy     User       @relation("CreatedBy", fields: [createdById], references: [id])
+
+  statusLogs TaskStatusLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([brigadeId, dateFrom, dateTo])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model TaskStatusLog {
+  id         String      @id @default(cuid())
+  taskId     String
+  task       Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id])
+  fromStatus TaskStatus?
+  toStatus   TaskStatus
+  comment    String?
+  source     LogSource
+  createdAt  DateTime    @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+model GeoCache {
+  id     String @id @default(cuid())
+  city   String
+  oblast String
+  lat    Float
+  lng    Float
+
+  createdAt DateTime @default(now())
+
+  @@unique([city, oblast])
+}

@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #009c4b;
+  --brand-dark: #007435;
+  --brand-orange: #f36e33;
+}
+
+body {
+  @apply bg-neutral-50 text-neutral-900 antialiased;
+}

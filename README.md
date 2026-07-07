@@ -1,0 +1,113 @@
+# СТАН КОМПЛЕКТ · Сервісна служба
+
+Веб-застосунок для управління виїзними сервісними бригадами ТОВ «СТАН КОМПЛЕКТ»: задачі-відрядження, статуси через Telegram, карта бригад по Україні, архів та звіти.
+
+**Стек:** Next.js 14 (App Router, TypeScript) · PostgreSQL + Prisma · NextAuth (credentials) · next-intl (укр/рос) · Leaflet + OpenStreetMap · grammY (Telegram webhook) · Railway.
+
+---
+
+## 1. Локальний запуск
+
+Потрібні: Node.js 20+, PostgreSQL 14+ (локально або Docker).
+
+```bash
+# 1. Залежності
+npm install
+
+# 2. Конфігурація
+cp .env.example .env
+# заповніть DATABASE_URL, NEXTAUTH_SECRET (openssl rand -base64 32)
+# TELEGRAM_* можна лишити порожніми до налаштування бота
+
+# 3. База даних: міграції + первинні дані
+npx prisma migrate deploy
+npx prisma db seed
+
+# 4. Запуск
+npm run dev
+# → http://localhost:3000
+```
+
+### Стартові облікові записи (створює seed)
+
+| Логін      | Роль              | Пароль за замовчуванням |
+| ---------- | ----------------- | ----------------------- |
+| `admin`    | Керівник відділу  | `Admin_2026!`           |
+| `director` | Директор (перегляд) | `Director_2026!`      |
+| `flyaga`   | Бригадир (Бригада Фляги)   | `Brigade_2026!` |
+| `kyrylko`  | Бригадир (Бригада Кирилка) | `Brigade_2026!` |
+
+> **Обов'язково змініть паролі після першого входу.** Для продакшн-seed можна задати власні паролі через змінні `SEED_ADMIN_PASSWORD`, `SEED_VIEWER_PASSWORD`, `SEED_BRIGADIER_PASSWORD` перед запуском `prisma db seed`.
+
+---
+
+## 2. Деплой на Railway (покроково)
+
+1. **Створіть проєкт** на [railway.app](https://railway.app) → *New Project* → *Deploy from GitHub repo* (попередньо запуште цей код у свій репозиторій).
+2. **Додайте PostgreSQL:** у проєкті → *Create* → *Database* → *Add PostgreSQL*.
+3. **Змінні середовища** сервісу застосунку (*Variables*):
+   - `DATABASE_URL` → *Add Reference* → змінна `DATABASE_URL` з плагіна Postgres;
+   - `NEXTAUTH_SECRET` → згенеруйте: `openssl rand -base64 32`;
+   - `NEXTAUTH_URL` та `APP_BASE_URL` → публічний URL сервісу (Railway видає його у *Settings → Networking → Generate Domain*), напр. `https://stan-service.up.railway.app`;
+   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` → див. розділ 3;
+   - `CRON_SECRET` → довільний випадковий рядок.
+4. **Збірка й старт** уже описані в `railway.json`: при кожному деплої виконується `prisma migrate deploy`, потім старт Next.js. Нічого додатково налаштовувати не треба.
+5. **Первинні дані:** один раз виконайте seed. Найпростіше — локально, вказавши в `.env` `DATABASE_URL` бази Railway (*Postgres → Connect → Public URL*):
+   ```bash
+   npx prisma db seed
+   ```
+6. **Щоденний дайджест (08:00 Києва):** у проєкті Railway → *Create* → *Empty Service* → у *Settings* задайте:
+   - *Cron Schedule*: `0 5 * * *` (Railway працює в UTC; 05:00 UTC = 08:00 Києва влітку. Взимку — `0 6 * * *`);
+   - *Start Command*:
+     ```bash
+     curl -fsS -H "Authorization: Bearer $CRON_SECRET" $APP_BASE_URL/api/cron/daily-digest
+     ```
+   - додайте цьому сервісу змінні `CRON_SECRET` і `APP_BASE_URL` (ті самі значення, що в основному сервісі).
+
+---
+
+## 3. Налаштування Telegram-бота
+
+1. **Створіть бота:** у Telegram напишіть [@BotFather](https://t.me/BotFather) → `/newbot` → задайте ім'я (напр. «СТАН КОМПЛЕКТ Сервіс») і username (напр. `stan_service_bot`). BotFather видасть **токен**.
+2. **Змінні:** впишіть токен у `TELEGRAM_BOT_TOKEN`, а в `TELEGRAM_WEBHOOK_SECRET` — довільний рядок (літери/цифри/`_-`, до 256 символів). Передеплойте сервіс.
+3. **Встановіть webhook:** увійдіть у застосунок як `admin` і відкрийте
+   ```
+   https://<ваш-домен>/api/telegram/set-webhook
+   ```
+   Ендпоінт сам викличе `setWebhook` Telegram із секретним токеном і поверне результат. (Альтернатива — вручну через curl, команда наведена у відповіді ендпоінта.)
+4. **Прив'язка бригадира:**
+   - адмін у розділі **Бригади й користувачі** натискає «Згенерувати код Telegram» біля бригадира — з'являється одноразовий код;
+   - бригадир відкриває бота і надсилає `/start <код>`;
+   - chat_id зберігається, бригадир починає отримувати задачі з кнопками статусів.
+
+---
+
+## 4. Структура проєкту
+
+```
+prisma/            схема БД, міграції, seed
+src/app/[locale]/  сторінки (uk / ru): головна-карта, задачі, архів,
+                   клієнти та верстати, бригади, звіти, вхід
+src/app/api/       auth, telegram/webhook, telegram/set-webhook,
+                   cron/daily-digest, export/archive, health
+src/components/    UI-компоненти (карта, задачі, шапка…)
+src/lib/           prisma, telegram, геокодування (Nominatim + кеш),
+                   робота з датами (Europe/Kyiv)
+src/messages/      словники uk.json / ru.json
+```
+
+## 5. Ролі
+
+- **Керівник відділу (admin)** — повний доступ: задачі, довідники, користувачі, звіти.
+- **Бригадир** — задачі своєї бригади, зміна статусів (веб або Telegram).
+- **Директор (viewer)** — перегляд усіх розділів без редагування.
+
+## 6. Корисні команди
+
+```bash
+npm run dev              # розробка
+npm run build            # продакшн-збірка (включає prisma generate)
+npm run typecheck        # перевірка типів
+npx prisma studio        # GUI для бази даних
+npx prisma migrate dev   # нова міграція під час розробки
+```
