@@ -9,6 +9,7 @@ const prisma = new PrismaClient();
 
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "Admin_2026!";
 const VIEWER_PASSWORD = process.env.SEED_VIEWER_PASSWORD ?? "Director_2026!";
+const ACCOUNTANT_PASSWORD = process.env.SEED_ACCOUNTANT_PASSWORD ?? "Account_2026!";
 const BRIGADIER_PASSWORD = process.env.SEED_BRIGADIER_PASSWORD ?? "Brigade_2026!";
 
 function hash(pw: string) {
@@ -79,6 +80,17 @@ async function main() {
   });
 
   await prisma.user.upsert({
+    where: { login: "accountant" },
+    update: {},
+    create: {
+      name: "Бухгалтер",
+      login: "accountant",
+      passwordHash: hash(ACCOUNTANT_PASSWORD),
+      role: Role.ACCOUNTANT,
+    },
+  });
+
+  await prisma.user.upsert({
     where: { login: "flyaga" },
     update: {},
     create: {
@@ -110,7 +122,9 @@ async function main() {
         name: "ТОВ «Дніпро Метал Профіль»",
         city: "Дніпро",
         oblast: "Дніпропетровська",
-        contacts: "Головний механік Петренко І.В., +380 67 000 00 01",
+        contacts: {
+          create: [{ position: "Головний механік", fullName: "Петренко І.В.", phone: "+380 67 000 00 01" }],
+        },
         machines: {
           create: [
             {
@@ -134,7 +148,9 @@ async function main() {
         name: "ПрАТ «Львівагромаш»",
         city: "Львів",
         oblast: "Львівська",
-        contacts: "Нач. виробництва Коваль О.М., +380 67 000 00 02",
+        contacts: {
+          create: [{ position: "Нач. виробництва", fullName: "Коваль О.М.", phone: "+380 67 000 00 02" }],
+        },
         machines: {
           create: [
             {
@@ -154,7 +170,9 @@ async function main() {
         name: "ТОВ «Бурова компанія Горизонти»",
         city: "Харків",
         oblast: "Харківська",
-        contacts: "Гол. інженер Сидоренко В.П., +380 67 000 00 03",
+        contacts: {
+          create: [{ position: "Гол. інженер", fullName: "Сидоренко В.П.", phone: "+380 67 000 00 03" }],
+        },
         machines: {
           create: [
             {
@@ -168,6 +186,16 @@ async function main() {
       include: { machines: true },
     });
 
+    // --- Демо-рахунки ---
+    const inv = async (clientId: string, number: string) =>
+      (
+        await prisma.invoice.upsert({
+          where: { clientId_number: { clientId, number } },
+          update: {},
+          create: { clientId, number },
+        })
+      ).id;
+
     // --- Демо-задачі ---
     const mkTask = (data: {
       brigadeId: string;
@@ -175,7 +203,7 @@ async function main() {
       machineId?: string;
       city: string;
       oblast: string;
-      invoiceNumber?: string;
+      invoiceId?: string;
       note?: string;
       dateFrom: Date;
       dateTo: Date;
@@ -190,7 +218,7 @@ async function main() {
       machineId: clientDnipro.machines[0].id,
       city: "Дніпро",
       oblast: "Дніпропетровська",
-      invoiceNumber: "СФ-2026-0712",
+      invoiceId: await inv(clientDnipro.id, "СФ-2026-0712"),
       note: "Заміна захисного скла, юстування оптики",
       dateFrom: day(0),
       dateTo: day(1),
@@ -204,7 +232,7 @@ async function main() {
       machineId: clientLviv.machines[0].id,
       city: "Львів",
       oblast: "Львівська",
-      invoiceNumber: "СФ-2026-0715",
+      invoiceId: await inv(clientLviv.id, "СФ-2026-0715"),
       note: "Діагностика частотного перетворювача SDS200L",
       dateFrom: day(1),
       dateTo: day(2),
@@ -218,7 +246,7 @@ async function main() {
       machineId: clientKharkiv.machines[0].id,
       city: "Харків",
       oblast: "Харківська",
-      invoiceNumber: "СФ-2026-0698",
+      invoiceId: await inv(clientKharkiv.id, "СФ-2026-0698"),
       note: "ПНР після встановлення, навчання операторів",
       dateFrom: day(-7),
       dateTo: day(-5),
@@ -232,7 +260,7 @@ async function main() {
       machineId: clientDnipro.machines[1].id,
       city: "Дніпро",
       oblast: "Дніпропетровська",
-      invoiceNumber: "СФ-2026-0701",
+      invoiceId: await inv(clientDnipro.id, "СФ-2026-0701"),
       note: "Калібрування осі Y",
       dateFrom: day(-3),
       dateTo: day(-2),
@@ -271,7 +299,7 @@ async function main() {
   }
 
   console.log("Seed завершено.");
-  console.log("Логіни: admin / director / flyaga / kyrylko");
+  console.log("Логіни: admin / director / accountant / flyaga / kyrylko");
 }
 
 main()

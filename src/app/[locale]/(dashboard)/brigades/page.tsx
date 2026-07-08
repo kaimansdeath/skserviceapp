@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function BrigadesPage({ params }: { params: { locale: string } }) {
   const t = await getTranslations();
   const session = (await auth())!;
-  if (session.user.role === "BRIGADE_LEADER") redirect(`/${params.locale}`);
+  if (session.user.role === "BRIGADE_LEADER" || session.user.role === "ACCOUNTANT")
+    redirect(`/${params.locale}`);
   const isAdmin = session.user.role === "ADMIN";
 
   const [brigades, users] = await Promise.all([

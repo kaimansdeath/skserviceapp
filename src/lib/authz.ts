@@ -20,3 +20,16 @@ export function canTouchBrigade(session: { user: { role: string; brigadeId: stri
   if (session.user.role === "BRIGADE_LEADER") return session.user.brigadeId === brigadeId;
   return false;
 }
+
+/** Чи може користувач працювати із задачею (враховує другу бригаду) */
+export function canTouchTask(
+  session: { user: { role: string; brigadeId: string | null } },
+  task: { brigadeId: string | null; secondBrigadeId?: string | null }
+) {
+  if (session.user.role === "ADMIN") return true;
+  if (session.user.role !== "BRIGADE_LEADER" || !session.user.brigadeId) return false;
+  return (
+    session.user.brigadeId === task.brigadeId ||
+    session.user.brigadeId === (task.secondBrigadeId ?? null)
+  );
+}

@@ -13,7 +13,6 @@ type Initial = {
   edrpou?: string | null;
   city?: string;
   oblast?: string;
-  contacts?: string | null;
   note?: string | null;
 };
 
@@ -29,7 +28,6 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
     edrpou: initial?.edrpou ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
-    contacts: initial?.contacts ?? "",
     note: initial?.note ?? "",
   });
 
@@ -42,7 +40,6 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
       const res = await saveClient(initial?.id ?? null, {
         ...form,
         edrpou: form.edrpou || null,
-        contacts: form.contacts || null,
         note: form.note || null,
       });
       if ("error" in res) {
@@ -79,9 +76,6 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
           </select>
         </Field>
       </div>
-      <Field label={t("contacts")}>
-        <input className={inputCls} value={form.contacts} onChange={(e) => setForm({ ...form, contacts: e.target.value })} />
-      </Field>
       <Field label={t("note")}>
         <textarea className={inputCls} rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
       </Field>

@@ -28,7 +28,7 @@ const userInput = z.object({
     .min(3)
     .regex(/^[a-z0-9_.-]+$/i),
   password: z.string().min(8),
-  role: z.enum(["ADMIN", "BRIGADE_LEADER", "VIEWER"]),
+  role: z.enum(["ADMIN", "BRIGADE_LEADER", "VIEWER", "ACCOUNTANT"]),
   brigadeId: z.string().optional().nullable(),
 });
 

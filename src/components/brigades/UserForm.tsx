@@ -18,7 +18,7 @@ export default function UserForm({ brigades }: { brigades: { id: string; name: s
     name: "",
     login: "",
     password: "",
-    role: "BRIGADE_LEADER" as "ADMIN" | "BRIGADE_LEADER" | "VIEWER",
+    role: "BRIGADE_LEADER" as "ADMIN" | "BRIGADE_LEADER" | "VIEWER" | "ACCOUNTANT",
     brigadeId: "",
   });
 
@@ -56,6 +56,7 @@ export default function UserForm({ brigades }: { brigades: { id: string; name: s
             <option value="BRIGADE_LEADER">{tr("BRIGADE_LEADER")}</option>
             <option value="ADMIN">{tr("ADMIN")}</option>
             <option value="VIEWER">{tr("VIEWER")}</option>
+            <option value="ACCOUNTANT">{tr("ACCOUNTANT")}</option>
           </select>
         </Field>
         {form.role === "BRIGADE_LEADER" && (

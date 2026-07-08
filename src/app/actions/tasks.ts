@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAdmin, canTouchBrigade } from "@/lib/authz";
+import { requireSession, requireAdmin, canTouchTask } from "@/lib/authz";
 import { findOverlaps } from "@/lib/overlap";
 import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
@@ -11,14 +11,18 @@ import { notifyTaskAssigned } from "@/lib/telegram";
 
 const taskInput = z
   .object({
+    taskType: z
+      .enum(["ENGINEERING", "PNR", "REPAIR", "DEFECTATION", "VISIT", "OTHER"])
+      .default("OTHER"),
     executorType: z.enum(["BRIGADE", "OUTSOURCE"]).default("BRIGADE"),
     brigadeId: z.string().optional().nullable(),
+    secondBrigadeId: z.string().optional().nullable(),
     outsourceName: z.string().optional().nullable(),
     clientId: z.string().min(1),
     machineId: z.string().optional().nullable(),
     city: z.string().min(1),
     oblast: z.string().min(1),
-    invoiceNumber: z.string().optional().nullable(),
+    invoiceId: z.string().optional().nullable(),
     orderNumber: z.string().optional().nullable(),
     note: z.string().optional().nullable(),
     dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -37,14 +41,19 @@ export async function createTask(input: TaskInput) {
 
   const task = await prisma.task.create({
     data: {
+      taskType: data.taskType,
       executorType: data.executorType,
       brigadeId: data.executorType === "BRIGADE" ? data.brigadeId! : null,
+      secondBrigadeId:
+        data.executorType === "BRIGADE" && data.secondBrigadeId && data.secondBrigadeId !== data.brigadeId
+          ? data.secondBrigadeId
+          : null,
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machineId: data.machineId || null,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
-      invoiceNumber: data.invoiceNumber?.trim() || null,
+      invoiceId: data.invoiceId || null,
       orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,
       dateFrom: dateFieldFromYmd(data.dateFrom),
@@ -81,14 +90,19 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
   await prisma.task.update({
     where: { id: taskId },
     data: {
+      taskType: data.taskType,
       executorType: data.executorType,
       brigadeId: newBrigadeId,
+      secondBrigadeId:
+        data.executorType === "BRIGADE" && data.secondBrigadeId && data.secondBrigadeId !== newBrigadeId
+          ? data.secondBrigadeId
+          : null,
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machineId: data.machineId || null,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
-      invoiceNumber: data.invoiceNumber?.trim() || null,
+      invoiceId: data.invoiceId || null,
       orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,
       dateFrom: dateFieldFromYmd(data.dateFrom),
@@ -130,10 +144,7 @@ export async function changeTaskStatus(params: {
   const task = await prisma.task.findUnique({ where: { id: params.taskId } });
   if (!task) return { error: "NOT_FOUND" as const };
 
-  const canTouch =
-    session.user.role === "ADMIN" ||
-    (task.brigadeId !== null && canTouchBrigade(session as any, task.brigadeId));
-  if (!canTouch) return { error: "FORBIDDEN" as const };
+  if (!canTouchTask(session as any, task)) return { error: "FORBIDDEN" as const };
 
   const allowed = nextStatusesFor(session.user.role, task.status as TaskStatusValue);
   if (!allowed.includes(params.to)) return { error: "TRANSITION" as const };

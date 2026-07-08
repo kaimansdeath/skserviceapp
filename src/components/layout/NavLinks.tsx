@@ -9,7 +9,7 @@ const ITEMS: Array<{ href: string; key: string; roles?: string[] }> = [
   { href: "/archive", key: "archive" },
   { href: "/clients", key: "clients" },
   { href: "/brigades", key: "brigades", roles: ["ADMIN", "VIEWER"] },
-  { href: "/reports", key: "reports", roles: ["ADMIN", "VIEWER"] },
+  { href: "/reports", key: "reports", roles: ["ADMIN", "VIEWER", "ACCOUNTANT"] },
 ];
 
 export default function NavLinks({ role }: { role: string }) {

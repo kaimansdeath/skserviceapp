@@ -10,7 +10,6 @@ const clientInput = z.object({
   edrpou: z.string().optional().nullable(),
   city: z.string().min(1),
   oblast: z.string().min(1),
-  contacts: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
 });
 
@@ -22,7 +21,6 @@ export async function saveClient(id: string | null, input: z.infer<typeof client
     edrpou: data.edrpou?.trim() || null,
     city: data.city.trim(),
     oblast: data.oblast.trim(),
-    contacts: data.contacts?.trim() || null,
     note: data.note?.trim() || null,
   };
   const client = id
@@ -65,6 +63,83 @@ export async function addMachineType(nameUk: string, nameRu: string) {
     update: { nameRu: nameRu.trim() },
     create: { nameUk: nameUk.trim(), nameRu: nameRu.trim() },
   });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+// --- Контактні особи клієнта ---
+
+export async function addClientContact(input: {
+  clientId: string;
+  position?: string | null;
+  fullName: string;
+  phone?: string | null;
+}) {
+  await requireAdmin();
+  if (!input.fullName.trim()) return { error: "EMPTY" as const };
+  await prisma.clientContact.create({
+    data: {
+      clientId: input.clientId,
+      position: input.position?.trim() || null,
+      fullName: input.fullName.trim(),
+      phone: input.phone?.trim() || null,
+    },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+export async function deleteClientContact(contactId: string) {
+  await requireAdmin();
+  await prisma.clientContact.delete({ where: { id: contactId } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+// --- Рахунки клієнта ---
+
+export async function addInvoice(clientId: string, number: string) {
+  await requireAdmin();
+  const trimmed = number.trim();
+  if (!trimmed) return { error: "EMPTY" as const };
+  const invoice = await prisma.invoice.upsert({
+    where: { clientId_number: { clientId, number: trimmed } },
+    update: {},
+    create: { clientId, number: trimmed },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true as const, id: invoice.id, number: trimmed };
+}
+
+export async function deleteInvoice(invoiceId: string) {
+  await requireAdmin();
+  const count = await prisma.task.count({ where: { invoiceId } });
+  if (count > 0) return { error: "HAS_TASKS" as const };
+  await prisma.invoice.delete({ where: { id: invoiceId } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+// --- Видалення верстатів та клієнтів (із захистом історії) ---
+
+export async function deleteMachine(machineId: string) {
+  await requireAdmin();
+  const count = await prisma.task.count({ where: { machineId } });
+  if (count > 0) return { error: "HAS_TASKS" as const };
+  await prisma.machine.delete({ where: { id: machineId } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+export async function deleteClient(clientId: string) {
+  await requireAdmin();
+  const tasks = await prisma.task.count({ where: { clientId } });
+  if (tasks > 0) return { error: "HAS_TASKS" as const };
+  await prisma.$transaction([
+    prisma.machine.deleteMany({ where: { clientId } }),
+    prisma.invoice.deleteMany({ where: { clientId } }),
+    prisma.client.delete({ where: { id: clientId } }), // контакти видаляться каскадно
+  ]);
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

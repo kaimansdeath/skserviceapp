@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { formatDateUa } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ContactsSection from "@/components/clients/ContactsSection";
+import InvoicesSection from "@/components/clients/InvoicesSection";
+import { DeleteMachineButton } from "@/components/clients/DeleteButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +20,14 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const client = await prisma.client.findUnique({
     where: { id: params.id },
     include: {
+      contacts: { orderBy: { createdAt: "asc" } },
+      invoices: {
+        include: { _count: { select: { tasks: true } } },
+        orderBy: { createdAt: "desc" },
+      },
       machines: { include: { type: true }, orderBy: { model: "asc" } },
       tasks: {
-        include: { brigade: true, machine: true },
+        include: { brigade: true, machine: true, invoice: true },
         orderBy: { dateFrom: "desc" },
         take: 50,
       },
@@ -35,7 +43,6 @@ export default async function ClientPage({ params }: { params: { id: string } })
           <p className="text-sm text-neutral-500">
             {client.edrpou ? `ЄДРПОУ ${client.edrpou} · ` : ""}
             {client.city}, {client.oblast}
-            {client.contacts ? ` · ${client.contacts}` : ""}
           </p>
           {client.note && <p className="mt-1 text-sm text-neutral-600">{client.note}</p>}
         </div>
@@ -48,6 +55,22 @@ export default async function ClientPage({ params }: { params: { id: string } })
           </Link>
         )}
       </div>
+
+      <ContactsSection
+        clientId={client.id}
+        contacts={client.contacts as any}
+        canEdit={isAdmin}
+      />
+
+      <InvoicesSection
+        clientId={client.id}
+        invoices={(client.invoices as any[]).map((i) => ({
+          id: i.id,
+          number: i.number,
+          tasksCount: i._count.tasks,
+        }))}
+        canEdit={isAdmin}
+      />
 
       <section>
         <div className="mb-2 flex items-center justify-between">
@@ -68,12 +91,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 <th className="px-3 py-2">{t("machines.fields.model")}</th>
                 <th className="px-3 py-2">{t("machines.fields.type")}</th>
                 <th className="px-3 py-2">{t("machines.fields.serial")}</th>
+                {isAdmin && <th className="w-10 px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody>
               {client.machines.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-3 py-6 text-center text-neutral-400">
+                  <td colSpan={isAdmin ? 4 : 3} className="px-3 py-6 text-center text-neutral-400">
                     {t("clients.noMachines")}
                   </td>
                 </tr>
@@ -87,6 +111,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
                   </td>
                   <td className="px-3 py-2">{locale === "ru" ? m.type.nameRu : m.type.nameUk}</td>
                   <td className="px-3 py-2 text-neutral-500">{m.serialNumber ?? "—"}</td>
+                  {isAdmin && (
+                    <td className="px-3 py-2">
+                      <DeleteMachineButton machineId={m.id} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -128,7 +157,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                       : task.brigade?.name ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>
-                  <td className="px-3 py-2">{task.invoiceNumber ?? "—"}</td>
+                  <td className="px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
                 </tr>
               ))}

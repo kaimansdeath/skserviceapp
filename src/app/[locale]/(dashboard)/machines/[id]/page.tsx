@@ -21,7 +21,7 @@ export default async function MachinePage({ params }: { params: { id: string } }
       client: true,
       type: true,
       tasks: {
-        include: { brigade: true },
+        include: { brigade: true, invoice: true },
         orderBy: { dateFrom: "desc" },
       },
     },
@@ -85,7 +85,7 @@ export default async function MachinePage({ params }: { params: { id: string } }
                       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
                       : task.brigade?.name ?? "—"}
                   </td>
-                  <td className="px-3 py-2">{task.invoiceNumber ?? "—"}</td>
+                  <td className="px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2">
                     <StatusBadge status={task.status} />
                     {task.failureReason && (

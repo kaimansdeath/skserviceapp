@@ -18,7 +18,10 @@ export default async function EditTaskPage({
 
   const [task, clients, brigades] = await Promise.all([
     prisma.task.findUnique({ where: { id: params.id } }),
-    prisma.client.findMany({ include: { machines: true }, orderBy: { name: "asc" } }),
+    prisma.client.findMany({
+      include: { machines: true, invoices: { orderBy: { createdAt: "desc" } } },
+      orderBy: { name: "asc" },
+    }),
     prisma.brigade.findMany({ orderBy: { name: "asc" } }),
   ]);
   if (!task) notFound();
@@ -37,19 +40,22 @@ export default async function EditTaskPage({
             id: m.id,
             label: `${m.model}${m.serialNumber ? ` (${m.serialNumber})` : ""}`,
           })),
+          invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
         initial={{
           id: task.id,
+          taskType: task.taskType as any,
           executorType: task.executorType as any,
           brigadeId: task.brigadeId,
+          secondBrigadeId: task.secondBrigadeId,
           outsourceName: task.outsourceName,
           orderNumber: task.orderNumber,
           clientId: task.clientId,
           machineId: task.machineId,
           city: task.city,
           oblast: task.oblast,
-          invoiceNumber: task.invoiceNumber,
+          invoiceId: task.invoiceId,
           note: task.note,
           dateFrom: toYmd(task.dateFrom),
           dateTo: toYmd(task.dateTo),

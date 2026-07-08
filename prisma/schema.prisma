@@ -14,6 +14,7 @@ enum Role {
   ADMIN // керівник відділу
   BRIGADE_LEADER // бригадир
   VIEWER // директор (тільки перегляд)
+  ACCOUNTANT // бухгалтер (перегляд, контроль наказів на відрядження)
 }
 
 enum Locale {
@@ -28,6 +29,15 @@ enum TaskStatus {
   ON_SITE // На об'єкті
   DONE // Виконано
   NOT_DONE // Не виконано (з причиною)
+}
+
+enum TaskType {
+  ENGINEERING // інжиніринг
+  PNR // пусконалагоджувальні роботи
+  REPAIR // ремонт
+  DEFECTATION // дефектовка
+  VISIT // виїзд
+  OTHER // інше
 }
 
 enum ExecutorType {
@@ -67,8 +77,9 @@ model Brigade {
   name     String  @unique
   isActive Boolean @default(true)
 
-  users User[]
-  tasks Task[]
+  users          User[]
+  tasks          Task[] @relation("TaskPrimaryBrigade")
+  secondaryTasks Task[] @relation("TaskSecondBrigade")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,9 +91,10 @@ model Client {
   edrpou   String? // код ЄДРПОУ
   city     String
   oblast   String
-  contacts String?
   note     String?
 
+  contacts ClientContact[]
+  invoices Invoice[]
   machines Machine[]
   tasks    Task[]
 
@@ -90,6 +102,35 @@ model Client {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+// Контактні особи клієнта
+model ClientContact {
+  id       String  @id @default(cuid())
+  clientId String
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  position String? // посада
+  fullName String // ПІБ
+  phone    String? // телефон
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
+// Рахунки клієнта (до одного клієнта — багато рахунків)
+model Invoice {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+  number   String
+  note     String?
+
+  tasks Task[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, number])
 }
 
 // Довідник типів обладнання (розширюваний без міграцій коду)
@@ -120,18 +161,22 @@ model Machine {
 }
 
 model Task {
-  id            String       @id @default(cuid())
-  executorType  ExecutorType @default(BRIGADE)
-  brigadeId     String? // обов'язково при executorType=BRIGADE
-  brigade       Brigade?     @relation(fields: [brigadeId], references: [id])
-  outsourceName String? // обов'язково при executorType=OUTSOURCE
+  id              String       @id @default(cuid())
+  taskType        TaskType     @default(OTHER)
+  executorType    ExecutorType @default(BRIGADE)
+  brigadeId       String? // основна бригада (обов'язково при executorType=BRIGADE)
+  brigade         Brigade?     @relation("TaskPrimaryBrigade", fields: [brigadeId], references: [id])
+  secondBrigadeId String? // друга бригада на об'єкті (опційно)
+  secondBrigade   Brigade?     @relation("TaskSecondBrigade", fields: [secondBrigadeId], references: [id])
+  outsourceName   String? // обов'язково при executorType=OUTSOURCE
   clientId      String
   client        Client     @relation(fields: [clientId], references: [id])
   machineId     String?
   machine       Machine?   @relation(fields: [machineId], references: [id])
   city          String
   oblast        String
-  invoiceNumber String?
+  invoiceId     String?
+  invoice       Invoice?   @relation(fields: [invoiceId], references: [id])
   orderNumber   String? // № наказу про відрядження
   note          String?
   dateFrom      DateTime   @db.Date
@@ -148,7 +193,8 @@ model Task {
 
   @@index([brigadeId, dateFrom, dateTo])
   @@index([status])
-  @@index([invoiceNumber])
+  @@index([invoiceId])
+  @@index([secondBrigadeId])
 }
 
 model TaskStatusLog {

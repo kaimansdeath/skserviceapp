@@ -22,6 +22,8 @@ export default async function TaskDetailPage({
     where: { id: params.id },
     include: {
       brigade: true,
+      secondBrigade: true,
+      invoice: true,
       client: true,
       machine: { include: { type: true } },
       createdBy: true,
@@ -30,8 +32,12 @@ export default async function TaskDetailPage({
   });
   if (!task) notFound();
 
-  // Бригадир бачить лише задачі своєї бригади
-  if (session.user.role === "BRIGADE_LEADER" && session.user.brigadeId !== task.brigadeId) {
+  // Бригадир бачить лише задачі своєї бригади (основної або другої)
+  if (
+    session.user.role === "BRIGADE_LEADER" &&
+    session.user.brigadeId !== task.brigadeId &&
+    session.user.brigadeId !== task.secondBrigadeId
+  ) {
     notFound();
   }
 
@@ -39,15 +45,16 @@ export default async function TaskDetailPage({
   const canChangeStatus =
     session.user.role === "ADMIN" ||
     (session.user.role === "BRIGADE_LEADER" &&
-      task.brigadeId !== null &&
-      session.user.brigadeId === task.brigadeId);
+      (session.user.brigadeId === task.brigadeId ||
+        session.user.brigadeId === task.secondBrigadeId));
 
   const rows: Array<[string, React.ReactNode]> = [
+    [t("tasks.fields.taskType"), t(`taskType.${task.taskType}` as any)],
     [
       t("tasks.fields.executor"),
       task.executorType === "OUTSOURCE"
         ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-        : task.brigade?.name ?? "—",
+        : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`,
     ],
     [
       t("tasks.fields.client"),
@@ -67,7 +74,7 @@ export default async function TaskDetailPage({
       ),
     ],
     [t("tasks.fields.city"), `${task.city}, ${task.oblast}`],
-    [t("tasks.fields.invoice"), task.invoiceNumber ?? "—"],
+    [t("tasks.fields.invoice"), task.invoice?.number ?? "—"],
     [t("tasks.fields.orderNumber"), task.orderNumber ?? "—"],
     [
       t("tasks.fields.dates"),

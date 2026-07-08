@@ -13,7 +13,7 @@ export default async function NewTaskPage({ params }: { params: { locale: string
 
   const [clients, brigades] = await Promise.all([
     prisma.client.findMany({
-      include: { machines: { include: { type: true } } },
+      include: { machines: { include: { type: true } }, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
     }),
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -33,6 +33,7 @@ export default async function NewTaskPage({ params }: { params: { locale: string
             id: m.id,
             label: `${m.model}${m.serialNumber ? ` (${m.serialNumber})` : ""}`,
           })),
+          invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
       />

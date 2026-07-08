@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Link } from "@/i18n/routing";
+import { DeleteClientButton } from "@/components/clients/DeleteButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function ClientsPage() {
   const isAdmin = session.user.role === "ADMIN";
 
   const clients = await prisma.client.findMany({
-    include: { _count: { select: { machines: true } } },
+    include: { _count: { select: { machines: true } }, contacts: { take: 1 } },
     orderBy: { name: "asc" },
   });
 
@@ -47,12 +48,13 @@ export default async function ClientsPage() {
               <th className="px-3 py-2">{t("clients.fields.city")}</th>
               <th className="px-3 py-2">{t("clients.fields.contacts")}</th>
               <th className="px-3 py-2 text-right">{t("clients.machinesCount")}</th>
+              {isAdmin && <th className="w-10 px-3 py-2"></th>}
             </tr>
           </thead>
           <tbody>
             {clients.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-neutral-400">
+                <td colSpan={isAdmin ? 5 : 4} className="px-3 py-8 text-center text-neutral-400">
                   {t("clients.empty")}
                 </td>
               </tr>
@@ -65,8 +67,17 @@ export default async function ClientsPage() {
                   </Link>
                 </td>
                 <td className="px-3 py-2">{c.city}, {c.oblast}</td>
-                <td className="px-3 py-2 text-neutral-500">{c.contacts ?? "—"}</td>
+                <td className="px-3 py-2 text-neutral-500">
+                  {c.contacts[0]
+                    ? `${c.contacts[0].fullName}${c.contacts[0].phone ? `, ${c.contacts[0].phone}` : ""}`
+                    : "—"}
+                </td>
                 <td className="px-3 py-2 text-right">{c._count.machines}</td>
+                {isAdmin && (
+                  <td className="px-3 py-2">
+                    <DeleteClientButton clientId={c.id} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

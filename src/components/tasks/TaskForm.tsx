@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { createTask, updateTask, checkOverlap, type TaskInput } from "@/app/actions/tasks";
-import { saveClient } from "@/app/actions/clients";
-import { ALL_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
+import { saveClient, addInvoice } from "@/app/actions/clients";
+import { ALL_STATUSES, TASK_TYPES, type TaskStatusValue } from "@/lib/taskStatus";
 import { OBLASTS } from "@/lib/oblasts";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
@@ -15,6 +15,7 @@ export type ClientOption = {
   city: string;
   oblast: string;
   machines: { id: string; label: string }[];
+  invoices: { id: string; number: string }[];
 };
 
 type Initial = Partial<TaskInput> & {
@@ -23,15 +24,9 @@ type Initial = Partial<TaskInput> & {
   failureReason?: string | null;
 };
 
-function OblastSelect({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function OblastSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const options: string[] = [...OBLASTS];
-  if (value && !options.includes(value)) options.unshift(value); // старі значення з БД
+  if (value && !options.includes(value)) options.unshift(value);
   return (
     <select className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" disabled>—</option>
@@ -57,20 +52,23 @@ export default function TaskForm({
   const tcl = useTranslations("clients");
   const tc = useTranslations("common");
   const ts = useTranslations("status");
+  const tt = useTranslations("taskType");
   const locale = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   const [clients, setClients] = useState<ClientOption[]>(clientsProp);
   const [form, setForm] = useState({
+    taskType: (initial?.taskType ?? "OTHER") as (typeof TASK_TYPES)[number],
     executorType: (initial?.executorType ?? "BRIGADE") as "BRIGADE" | "OUTSOURCE",
     brigadeId: initial?.brigadeId ?? "",
+    secondBrigadeId: initial?.secondBrigadeId ?? "",
     outsourceName: initial?.outsourceName ?? "",
     clientId: initial?.clientId ?? "",
     machineId: initial?.machineId ?? "",
+    invoiceId: initial?.invoiceId ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
-    invoiceNumber: initial?.invoiceNumber ?? "",
     orderNumber: initial?.orderNumber ?? "",
     note: initial?.note ?? "",
     dateFrom: initial?.dateFrom ?? "",
@@ -85,8 +83,13 @@ export default function TaskForm({
 
   // Швидке додавання клієнта
   const [showQuickClient, setShowQuickClient] = useState(false);
-  const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "", contacts: "" });
+  const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "" });
   const [qcPending, startQcTransition] = useTransition();
+
+  // Швидке додавання рахунку
+  const [showQuickInvoice, setShowQuickInvoice] = useState(false);
+  const [newInvoice, setNewInvoice] = useState("");
+  const [invPending, startInvTransition] = useTransition();
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === form.clientId),
@@ -103,6 +106,7 @@ export default function TaskForm({
       ...f,
       clientId,
       machineId: "",
+      invoiceId: "",
       city: c ? c.city : f.city,
       oblast: c ? c.oblast : f.oblast,
     }));
@@ -115,7 +119,6 @@ export default function TaskForm({
         edrpou: qc.edrpou || null,
         city: qc.city,
         oblast: qc.oblast,
-        contacts: qc.contacts || null,
         note: null,
       });
       if ("error" in res) return;
@@ -125,31 +128,65 @@ export default function TaskForm({
         city: qc.city.trim(),
         oblast: qc.oblast,
         machines: [],
+        invoices: [],
       };
       setClients((list) => [...list, created].sort((a, b) => a.name.localeCompare(b.name)));
-      setForm((f) => ({ ...f, clientId: created.id, machineId: "", city: created.city, oblast: created.oblast }));
+      setForm((f) => ({
+        ...f,
+        clientId: created.id,
+        machineId: "",
+        invoiceId: "",
+        city: created.city,
+        oblast: created.oblast,
+      }));
       setShowQuickClient(false);
-      setQc({ name: "", edrpou: "", city: "", oblast: "", contacts: "" });
+      setQc({ name: "", edrpou: "", city: "", oblast: "" });
     });
   }
 
-  // Перевірка перетину дат (лише для бригад) — попередження, не блокування
+  function quickAddInvoice() {
+    if (!form.clientId) return;
+    startInvTransition(async () => {
+      const res = await addInvoice(form.clientId, newInvoice);
+      if ("error" in res) return;
+      setClients((list) =>
+        list.map((c) =>
+          c.id === form.clientId && !c.invoices.some((i) => i.id === res.id)
+            ? { ...c, invoices: [...c.invoices, { id: res.id, number: res.number }] }
+            : c
+        )
+      );
+      setForm((f) => ({ ...f, invoiceId: res.id }));
+      setShowQuickInvoice(false);
+      setNewInvoice("");
+    });
+  }
+
+  // Перевірка перетину дат для обох бригад — попередження, не блокування
   useEffect(() => {
     let cancelled = false;
+    const brigadeIds = [form.brigadeId, form.secondBrigadeId].filter(Boolean) as string[];
     if (
       form.executorType === "BRIGADE" &&
-      form.brigadeId &&
+      brigadeIds.length > 0 &&
       form.dateFrom &&
       form.dateTo &&
       form.dateTo >= form.dateFrom
     ) {
-      checkOverlap({
-        brigadeId: form.brigadeId,
-        dateFrom: form.dateFrom,
-        dateTo: form.dateTo,
-        excludeTaskId: initial?.id,
-      }).then((r) => {
-        if (!cancelled) setOverlaps(r);
+      Promise.all(
+        brigadeIds.map((bid) =>
+          checkOverlap({
+            brigadeId: bid,
+            dateFrom: form.dateFrom,
+            dateTo: form.dateTo,
+            excludeTaskId: initial?.id,
+          })
+        )
+      ).then((results) => {
+        if (cancelled) return;
+        const merged = results.flat();
+        const unique = merged.filter((o, i) => merged.findIndex((x) => x.id === o.id) === i);
+        setOverlaps(unique);
       });
     } else {
       setOverlaps([]);
@@ -157,7 +194,7 @@ export default function TaskForm({
     return () => {
       cancelled = true;
     };
-  }, [form.executorType, form.brigadeId, form.dateFrom, form.dateTo, initial?.id]);
+  }, [form.executorType, form.brigadeId, form.secondBrigadeId, form.dateFrom, form.dateTo, initial?.id]);
 
   const dateRangeInvalid = !!form.dateFrom && !!form.dateTo && form.dateTo < form.dateFrom;
 
@@ -169,14 +206,16 @@ export default function TaskForm({
     }
     startTransition(async () => {
       const payload: TaskInput = {
+        taskType: form.taskType,
         executorType: form.executorType,
         brigadeId: form.executorType === "BRIGADE" ? form.brigadeId : null,
+        secondBrigadeId: form.executorType === "BRIGADE" ? form.secondBrigadeId || null : null,
         outsourceName: form.executorType === "OUTSOURCE" ? form.outsourceName : null,
         clientId: form.clientId,
         machineId: form.machineId || null,
+        invoiceId: form.invoiceId || null,
         city: form.city,
         oblast: form.oblast,
-        invoiceNumber: form.invoiceNumber || null,
         orderNumber: form.orderNumber || null,
         note: form.note || null,
         dateFrom: form.dateFrom,
@@ -203,42 +242,77 @@ export default function TaskForm({
 
   return (
     <div className="max-w-2xl space-y-4">
-      {/* Виконавець: бригада або аутсорс */}
-      <div>
-        <span className="mb-1 block text-sm text-neutral-600">{t("fields.executor")}</span>
-        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 text-sm font-semibold">
-          {(["BRIGADE", "OUTSOURCE"] as const).map((et) => (
-            <button
-              key={et}
-              type="button"
-              onClick={() => set("executorType", et)}
-              className={
-                "rounded-md px-3 py-1.5 transition " +
-                (form.executorType === et
-                  ? "bg-brand text-white"
-                  : "text-neutral-500 hover:text-neutral-800")
-              }
-            >
-              {t(`executor.${et}` as any)}
-            </button>
-          ))}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t("fields.taskType")}>
+          <select
+            className={inputCls}
+            value={form.taskType}
+            onChange={(e) => set("taskType", e.target.value as any)}
+          >
+            {TASK_TYPES.map((tp) => (
+              <option key={tp} value={tp}>{tt(tp as any)}</option>
+            ))}
+          </select>
+        </Field>
+        <div>
+          <span className="mb-1 block text-sm text-neutral-600">{t("fields.executor")}</span>
+          <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 text-sm font-semibold">
+            {(["BRIGADE", "OUTSOURCE"] as const).map((et) => (
+              <button
+                key={et}
+                type="button"
+                onClick={() => set("executorType", et)}
+                className={
+                  "rounded-md px-3 py-1.5 transition " +
+                  (form.executorType === et
+                    ? "bg-brand text-white"
+                    : "text-neutral-500 hover:text-neutral-800")
+                }
+              >
+                {t(`executor.${et}` as any)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {form.executorType === "BRIGADE" ? (
-          <Field label={t("fields.brigade")}>
-            <select
-              className={inputCls}
-              value={form.brigadeId}
-              onChange={(e) => set("brigadeId", e.target.value)}
-            >
-              <option value="" disabled>—</option>
-              {brigades.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </Field>
+          <>
+            <Field label={t("fields.brigade")}>
+              <select
+                className={inputCls}
+                value={form.brigadeId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    brigadeId: v,
+                    secondBrigadeId: f.secondBrigadeId === v ? "" : f.secondBrigadeId,
+                  }));
+                }}
+              >
+                <option value="" disabled>—</option>
+                {brigades.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t("fields.secondBrigade")}>
+              <select
+                className={inputCls}
+                value={form.secondBrigadeId}
+                onChange={(e) => set("secondBrigadeId", e.target.value)}
+              >
+                <option value="">{t("fields.noSecondBrigade")}</option>
+                {brigades
+                  .filter((b) => b.id !== form.brigadeId)
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+              </select>
+            </Field>
+          </>
         ) : (
           <Field label={t("fields.outsourceName")}>
             <input
@@ -248,7 +322,9 @@ export default function TaskForm({
             />
           </Field>
         )}
+      </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
             <span className="text-sm text-neutral-600">{t("fields.client")}</span>
@@ -273,6 +349,19 @@ export default function TaskForm({
             ))}
           </select>
         </div>
+        <Field label={t("fields.machine")}>
+          <select
+            className={inputCls}
+            value={form.machineId}
+            onChange={(e) => set("machineId", e.target.value)}
+            disabled={!selectedClient}
+          >
+            <option value="">{t("fields.noMachine")}</option>
+            {selectedClient?.machines.map((m) => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+        </Field>
       </div>
 
       {showQuickClient && (
@@ -292,9 +381,6 @@ export default function TaskForm({
               <OblastSelect value={qc.oblast} onChange={(v) => setQc({ ...qc, oblast: v })} />
             </Field>
           </div>
-          <Field label={tcl("fields.contacts")}>
-            <input className={inputCls} value={qc.contacts} onChange={(e) => setQc({ ...qc, contacts: e.target.value })} />
-          </Field>
           <button
             type="button"
             className={btnPrimary}
@@ -307,26 +393,49 @@ export default function TaskForm({
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t("fields.machine")}>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm text-neutral-600">{t("fields.invoice")}</span>
+            {isAdmin && form.clientId && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand-dark hover:underline"
+                onClick={() => setShowQuickInvoice((v) => !v)}
+              >
+                {showQuickInvoice ? tc("cancel") : `+ ${t("fields.newInvoice")}`}
+              </button>
+            )}
+          </div>
           <select
             className={inputCls}
-            value={form.machineId ?? ""}
-            onChange={(e) => set("machineId", e.target.value)}
+            value={form.invoiceId}
+            onChange={(e) => set("invoiceId", e.target.value)}
             disabled={!selectedClient}
           >
-            <option value="">{t("fields.noMachine")}</option>
-            {selectedClient?.machines.map((m) => (
-              <option key={m.id} value={m.id}>{m.label}</option>
+            <option value="">{t("fields.noInvoice")}</option>
+            {selectedClient?.invoices.map((i) => (
+              <option key={i.id} value={i.id}>{i.number}</option>
             ))}
           </select>
-        </Field>
-        <Field label={t("fields.invoice")}>
-          <input
-            className={inputCls}
-            value={form.invoiceNumber}
-            onChange={(e) => set("invoiceNumber", e.target.value)}
-          />
-        </Field>
+          {showQuickInvoice && (
+            <div className="mt-2 flex gap-2">
+              <input
+                className={inputCls}
+                placeholder="СФ-2026-…"
+                value={newInvoice}
+                onChange={(e) => setNewInvoice(e.target.value)}
+              />
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={invPending || !newInvoice.trim()}
+                onClick={quickAddInvoice}
+              >
+                {invPending ? "…" : tc("add")}
+              </button>
+            </div>
+          )}
+        </div>
         <Field label={t("fields.orderNumber")}>
           <input
             className={inputCls}
@@ -349,12 +458,7 @@ export default function TaskForm({
       </div>
 
       <Field label={t("fields.note")}>
-        <textarea
-          className={inputCls}
-          rows={3}
-          value={form.note}
-          onChange={(e) => set("note", e.target.value)}
-        />
+        <textarea className={inputCls} rows={3} value={form.note} onChange={(e) => set("note", e.target.value)} />
       </Field>
 
       {initial?.id && isAdmin && (
@@ -382,9 +486,7 @@ export default function TaskForm({
         </div>
       )}
 
-      {dateRangeInvalid && (
-        <p className="text-sm font-medium text-red-600">{t("dateRangeError")}</p>
-      )}
+      {dateRangeInvalid && <p className="text-sm font-medium text-red-600">{t("dateRangeError")}</p>}
 
       {overlaps.length > 0 && (
         <div className="rounded-lg border border-brand-orange/40 bg-orange-50 p-3 text-sm">

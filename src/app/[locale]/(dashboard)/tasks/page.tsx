@@ -22,7 +22,9 @@ export default async function TasksPage({
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.task.findMany({
       where: {
-        ...(brigadeFilter ? { brigadeId: brigadeFilter } : {}),
+        ...(brigadeFilter
+          ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
+          : {}),
         ...(searchParams.status ? { status: searchParams.status as any } : {}),
         ...(searchParams.city
           ? { city: { contains: searchParams.city, mode: "insensitive" } }
@@ -30,7 +32,7 @@ export default async function TasksPage({
         ...(searchParams.from ? { dateTo: { gte: dateFieldFromYmd(searchParams.from) } } : {}),
         ...(searchParams.to ? { dateFrom: { lte: dateFieldFromYmd(searchParams.to) } } : {}),
       },
-      include: { brigade: true, client: true, machine: true },
+      include: { brigade: true, secondBrigade: true, client: true, machine: true, invoice: true },
       orderBy: [{ dateFrom: "desc" }],
       take: 200,
     }),
@@ -108,13 +110,16 @@ export default async function TasksPage({
                         {t("tasks.executor.OUTSOURCE")}: {task.outsourceName ?? "—"}
                       </span>
                     ) : (
-                      task.brigade?.name ?? "—"
+                      <>
+                        {task.brigade?.name ?? "—"}
+                        {task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2">{task.client.name}</td>
                   <td className="whitespace-nowrap px-3 py-2">{task.city}</td>
                   <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>
-                  <td className="whitespace-nowrap px-3 py-2">{task.invoiceNumber ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
                 </tr>
               );

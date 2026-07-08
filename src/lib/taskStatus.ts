@@ -36,3 +36,12 @@ export const STATUS_BADGE: Record<TaskStatusValue, string> = {
   DONE: "bg-brand text-white",
   NOT_DONE: "bg-red-100 text-red-700",
 };
+
+export const TASK_TYPES = [
+  "ENGINEERING",
+  "PNR",
+  "REPAIR",
+  "DEFECTATION",
+  "VISIT",
+  "OTHER",
+] as const;
