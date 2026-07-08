@@ -12,10 +12,11 @@ import { resolveCities, geoKey, KYIV_BASE } from "@/lib/geocode";
 import { ALL_STATUSES } from "@/lib/taskStatus";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
-import DashboardMap from "@/components/map/DashboardMap";
 import type { MapMarker, MapLine } from "@/components/map/UkraineMap";
-import MapControls from "@/components/dashboard/MapControls";
+import MapSection from "@/components/dashboard/MapSection";
 import KanbanControls from "@/components/dashboard/KanbanControls";
+import MonthGantt, { type GanttRow } from "@/components/dashboard/MonthGantt";
+import { STATUS_HEX } from "@/lib/taskStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,8 @@ export default async function DashboardPage({
 
     const geo = await resolveCities(tasks.map((x: any) => ({ city: x.city, oblast: x.oblast })));
 
-    const byBrigade = new Map<string, { name: string; points: [number, number][] }>();
+    // черговість точок: нумерація в хронологічному порядку окремо для кожної бригади
+    const byBrigade = new Map<string, { name: string; points: [number, number][]; seq: number }>();
     for (const task of tasks as any[]) {
       const pos = geo.get(geoKey(task.city, task.oblast));
       if (!pos) continue;
@@ -82,20 +84,22 @@ export default async function DashboardPage({
         const color = brigadeColor.get(bid) ?? "#6B7280";
         const bName =
           bid === task.brigadeId ? task.brigade?.name : task.secondBrigade?.name;
+        if (!byBrigade.has(bid)) byBrigade.set(bid, { name: bName ?? "", points: [], seq: 0 });
+        const entry = byBrigade.get(bid)!;
+        entry.seq++;
         markers.push({
           lat: pos.lat,
           lng: pos.lng,
           color,
-          radius: 8,
-          title: `${task.city}`,
+          label: String(entry.seq),
+          title: `${entry.seq}. ${task.city}`,
           lines: [
             bName ?? "",
             task.client.name,
             `${formatDateUa(task.dateFrom)} — ${formatDateUa(task.dateTo)}`,
           ],
         });
-        if (!byBrigade.has(bid)) byBrigade.set(bid, { name: bName ?? "", points: [] });
-        byBrigade.get(bid)!.points.push([pos.lat, pos.lng]);
+        entry.points.push([pos.lat, pos.lng]);
       }
     }
     // маршрут-пунктир, коли обрано одну бригаду
@@ -210,6 +214,11 @@ export default async function DashboardPage({
     }),
   ]);
 
+  const executorNamePlain = (task: any) =>
+    task.executorType === "OUTSOURCE"
+      ? task.outsourceName ?? "—"
+      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
+
   const executorName = (task: any) =>
     task.executorType === "OUTSOURCE"
       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
@@ -272,6 +281,26 @@ export default async function DashboardPage({
   const byStatus = new Map<string, any[]>(ALL_STATUSES.map((s) => [s, []]));
   for (const task of kanbanTasks as any[]) byStatus.get(task.status)?.push(task);
 
+  // Календар місяця з полосками задач
+  const daysInMonth = monthEnd.getUTCDate();
+  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => {
+    const wd = new Date(Date.UTC(ky, km - 1, i + 1)).getUTCDay();
+    return { n: i + 1, weekend: wd === 0 || wd === 6 };
+  });
+  const todayIdx =
+    today >= monthStart && today <= monthEnd ? today.getUTCDate() - 1 : -1;
+  const clampIdx = (d: Date) =>
+    Math.min(Math.max(Math.round((d.getTime() - monthStart.getTime()) / 86400000), 0), daysInMonth - 1);
+  const ganttRows: GanttRow[] = (kanbanTasks as any[]).slice(0, 40).map((task) => ({
+    id: task.id,
+    title: task.client.name,
+    sub: `${task.city} · ${executorNamePlain(task)}`,
+    startIdx: clampIdx(task.dateFrom),
+    endIdx: clampIdx(task.dateTo),
+    color: STATUS_HEX[task.status as keyof typeof STATUS_HEX] ?? "#9CA3AF",
+    overdue: isOverdue(task.dateTo, task.status),
+  }));
+
   /* ---------------- Аналітика (MTTR, тривалість) ---------------- */
   const yearAgo = new Date(today);
   yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
@@ -311,33 +340,30 @@ export default async function DashboardPage({
 
   /* ---------------- Рендер ---------------- */
   return (
-    <div className="space-y-8">
-      {/* Карта */}
-      <section>
-        <MapControls brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))} />
-        <div className="overflow-hidden rounded-xl border border-neutral-200">
-          <DashboardMap markers={markers} polylines={polylines} />
-        </div>
-        {!periodMode && (
-          <div className="mt-2 flex flex-wrap gap-4 text-xs text-neutral-500">
-            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#009C4B] align-middle"></span>{t("status.ON_SITE")}</span>
-            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#F36E33] align-middle"></span>{t("status.EN_ROUTE")}</span>
-            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#DC2626] align-middle"></span>{t("dashboard.map.hasOverdue")}</span>
-            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#9CA3AF] align-middle"></span>{t("dashboard.map.atBase")}</span>
-          </div>
-        )}
-      </section>
-
-      {/* Зведення дня */}
+    <div className="space-y-4">
+      {/* Зведення дня — завжди видиме, першим рядком */}
       <section className="grid gap-4 lg:grid-cols-3">
         {summaryCard(t("dashboard.todayTasks"), todayTasks, "green")}
         {summaryCard(t("dashboard.overdue"), overdueTasks, "red")}
         {summaryCard(t("dashboard.upcoming"), upcoming, "neutral")}
       </section>
 
-      {/* Канбан */}
-      <section>
-        <h2 className="mb-2 text-base font-bold">{t("dashboard.kanban.title")}</h2>
+      {/* Карта — розгортається */}
+      <MapSection
+        markers={markers}
+        polylines={polylines}
+        brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        periodMode={periodMode}
+        defaultOpen={periodMode}
+      />
+
+      {/* Канбан — розгортається */}
+      <details className="rounded-xl border border-neutral-200 bg-white" open={!!searchParams.kbrig || !!searchParams.kmonth}>
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+          <span className="text-base font-bold">{t("dashboard.kanban.title")}</span>
+          <span className="text-neutral-400">▾</span>
+        </summary>
+        <div className="border-t border-neutral-100 p-4">
         <KanbanControls
           brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
           defaultMonth={kmonth}
@@ -377,11 +403,47 @@ export default async function DashboardPage({
             );
           })}
         </div>
-      </section>
+        </div>
+      </details>
 
-      {/* Аналітика */}
-      <section>
-        <h2 className="mb-2 text-base font-bold">{t("dashboard.analytics.title")}</h2>
+      {/* Календар місяця з полосками задач — розгортається */}
+      <details className="rounded-xl border border-neutral-200 bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+          <span className="text-base font-bold">{t("dashboard.sections.calendar")}</span>
+          <span className="text-neutral-400">▾</span>
+        </summary>
+        <div className="border-t border-neutral-100 p-4">
+          <KanbanControls
+            brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+            defaultMonth={kmonth}
+          />
+          <MonthGantt
+            days={calendarDays}
+            todayIdx={todayIdx}
+            rows={ganttRows}
+            emptyText={t("dashboard.noTasks")}
+          />
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-500">
+            {ALL_STATUSES.map((st) => (
+              <span key={st}>
+                <span
+                  className="mr-1 inline-block h-3 w-3 rounded-full align-middle"
+                  style={{ backgroundColor: STATUS_HEX[st] }}
+                ></span>
+                {t(`status.${st}` as any)}
+              </span>
+            ))}
+          </div>
+        </div>
+      </details>
+
+      {/* Аналітика — розгортається */}
+      <details className="rounded-xl border border-neutral-200 bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
+          <span className="text-base font-bold">{t("dashboard.analytics.title")}</span>
+          <span className="text-neutral-400">▾</span>
+        </summary>
+        <div className="border-t border-neutral-100 p-4">
         <p className="mb-3 text-xs text-neutral-400">{t("dashboard.analytics.hint")}</p>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-neutral-200 bg-white p-4">
@@ -437,7 +499,8 @@ export default async function DashboardPage({
             </div>
           </div>
         )}
-      </section>
+        </div>
+      </details>
     </div>
   );
 }

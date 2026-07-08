@@ -1,6 +1,7 @@
 "use client";
 
-import { MapContainer, TileLayer, CircleMarker, Popup, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, Polyline } from "react-leaflet";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 export type MapMarker = {
@@ -10,12 +11,24 @@ export type MapMarker = {
   title: string;
   lines: string[];
   radius?: number;
+  /** Номер точки (черговість) — рендериться цифрою на маркері */
+  label?: string;
 };
 
 export type MapLine = {
   color: string;
   points: [number, number][];
 };
+
+function numberIcon(color: string, label: string) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:26px;height:26px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)">${label}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -13],
+  });
+}
 
 export default function UkraineMap({
   markers,
@@ -42,18 +55,8 @@ export default function UkraineMap({
           pathOptions={{ color: l.color, weight: 2.5, dashArray: "6 6", opacity: 0.7 }}
         />
       ))}
-      {markers.map((m, i) => (
-        <CircleMarker
-          key={i}
-          center={[m.lat, m.lng]}
-          radius={m.radius ?? 9}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 2,
-            fillColor: m.color,
-            fillOpacity: 0.9,
-          }}
-        >
+      {markers.map((m, i) => {
+        const popup = (
           <Popup>
             <div style={{ fontFamily: "inherit", fontSize: 13, minWidth: 180 }}>
               <strong>{m.title}</strong>
@@ -62,8 +65,22 @@ export default function UkraineMap({
               ))}
             </div>
           </Popup>
-        </CircleMarker>
-      ))}
+        );
+        return m.label ? (
+          <Marker key={i} position={[m.lat, m.lng]} icon={numberIcon(m.color, m.label)}>
+            {popup}
+          </Marker>
+        ) : (
+          <CircleMarker
+            key={i}
+            center={[m.lat, m.lng]}
+            radius={m.radius ?? 9}
+            pathOptions={{ color: "#ffffff", weight: 2, fillColor: m.color, fillOpacity: 0.9 }}
+          >
+            {popup}
+          </CircleMarker>
+        );
+      })}
     </MapContainer>
   );
 }

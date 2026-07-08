@@ -50,3 +50,14 @@ export const TASK_TYPES = [
   "VISIT",
   "OTHER",
 ] as const;
+
+/** HEX-кольори статусів (карта, календар-діаграма) */
+export const STATUS_HEX: Record<TaskStatusValue, string> = {
+  ASSIGNED: "#9CA3AF",
+  CONFIRMED: "#0EA5E9",
+  EN_ROUTE: "#F36E33",
+  ON_SITE: "#10B981",
+  DONE: "#009C4B",
+  PARTIALLY_DONE: "#F59E0B",
+  NOT_DONE: "#DC2626",
+};
