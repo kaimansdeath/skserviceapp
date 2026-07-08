@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { addManager, deleteManager } from "@/app/actions/clients";
+import { addManager, deleteManager, transferManagerClients } from "@/app/actions/clients";
 import { inputCls, btnPrimary } from "@/components/ui/Field";
 
 type Manager = { id: string; name: string; clientsCount: number };
@@ -14,6 +14,8 @@ export default function ManagersSection({ managers }: { managers: Manager[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
+  const [transferFrom, setTransferFrom] = useState<string | null>(null);
+  const [transferTo, setTransferTo] = useState("");
 
   return (
     <div className="space-y-4">
@@ -50,7 +52,19 @@ export default function ManagersSection({ managers }: { managers: Manager[] }) {
               <tr key={m.id} className="border-b border-neutral-100 last:border-0">
                 <td className="px-3 py-2 font-medium">{m.name}</td>
                 <td className="px-3 py-2 text-right">{m.clientsCount}</td>
-                <td className="px-3 py-2">
+                <td className="whitespace-nowrap px-3 py-2 text-right">
+                  {m.clientsCount > 0 && (
+                    <button
+                      className="mr-3 text-sm font-medium text-neutral-500 hover:text-brand-dark disabled:opacity-40"
+                      disabled={pending}
+                      onClick={() => {
+                        setTransferFrom(transferFrom === m.id ? null : m.id);
+                        setTransferTo("");
+                      }}
+                    >
+                      {t("transfer")}
+                    </button>
+                  )}
                   <button
                     className="text-neutral-400 transition hover:text-red-600 disabled:opacity-40"
                     disabled={pending}
@@ -64,6 +78,35 @@ export default function ManagersSection({ managers }: { managers: Manager[] }) {
                   >
                     ✕
                   </button>
+                  {transferFrom === m.id && (
+                    <div className="mt-2 flex items-center justify-end gap-2">
+                      <select
+                        className={inputCls + " w-44"}
+                        value={transferTo}
+                        onChange={(e) => setTransferTo(e.target.value)}
+                      >
+                        <option value="" disabled>{t("transferTo")}</option>
+                        {managers
+                          .filter((x) => x.id !== m.id)
+                          .map((x) => (
+                            <option key={x.id} value={x.id}>{x.name}</option>
+                          ))}
+                      </select>
+                      <button
+                        className={btnPrimary}
+                        disabled={pending || !transferTo}
+                        onClick={() =>
+                          startTransition(async () => {
+                            await transferManagerClients(m.id, transferTo);
+                            setTransferFrom(null);
+                            router.refresh();
+                          })
+                        }
+                      >
+                        OK
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

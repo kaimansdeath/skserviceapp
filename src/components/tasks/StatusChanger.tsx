@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { changeTaskStatus } from "@/app/actions/tasks";
-import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
+import { nextStatusesFor, REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { btnSecondary, inputCls, btnPrimary } from "@/components/ui/Field";
 
 export default function StatusChanger({
@@ -21,7 +21,7 @@ export default function StatusChanger({
   const tc = useTranslations("common");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [askReason, setAskReason] = useState(false);
+  const [askReason, setAskReason] = useState<TaskStatusValue | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +36,7 @@ export default function StatusChanger({
         setError(res.error === "REASON_REQUIRED" ? t("reasonRequired") : tc("error"));
         return;
       }
-      setAskReason(false);
+      setAskReason(null);
       setReason("");
       router.refresh();
     });
@@ -47,12 +47,16 @@ export default function StatusChanger({
       <p className="text-sm font-semibold text-neutral-700">{t("changeStatus")}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((s) =>
-          s === "NOT_DONE" ? (
+          REASON_STATUSES.includes(s) ? (
             <button
               key={s}
-              className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+              className={
+                s === "NOT_DONE"
+                  ? "rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                  : "rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50"
+              }
               disabled={pending}
-              onClick={() => setAskReason(true)}
+              onClick={() => setAskReason(s)}
             >
               {ts(s as any)}
             </button>
@@ -69,8 +73,10 @@ export default function StatusChanger({
         )}
       </div>
       {askReason && (
-        <div className="max-w-md space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
-          <p className="text-sm font-medium text-red-700">{t("notDoneReasonPrompt")}</p>
+        <div className="max-w-md space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+          <p className="text-sm font-medium text-neutral-700">
+            {askReason === "NOT_DONE" ? t("notDoneReasonPrompt") : t("partialReasonPrompt")}
+          </p>
           <textarea
             className={inputCls}
             rows={2}
@@ -81,11 +87,11 @@ export default function StatusChanger({
             <button
               className={btnPrimary}
               disabled={pending || !reason.trim()}
-              onClick={() => apply("NOT_DONE", reason)}
+              onClick={() => apply(askReason, reason)}
             >
               {tc("save")}
             </button>
-            <button className={btnSecondary} onClick={() => setAskReason(false)}>
+            <button className={btnSecondary} onClick={() => setAskReason(null)}>
               {tc("cancel")}
             </button>
           </div>

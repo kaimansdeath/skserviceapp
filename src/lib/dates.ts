@@ -23,7 +23,14 @@ export function formatDateUa(d: Date): string {
 }
 
 export function isOverdue(dateTo: Date, status: string): boolean {
-  return !["DONE", "NOT_DONE"].includes(status) && dateTo < kyivToday();
+  return !["DONE", "PARTIALLY_DONE", "NOT_DONE"].includes(status) && dateTo < kyivToday();
+}
+
+/** Межа архіву: завершені задачі старші за 14 днів */
+export function archiveCutoff(): Date {
+  const d = kyivToday();
+  d.setUTCDate(d.getUTCDate() - 14);
+  return d;
 }
 
 export function isToday(dateFrom: Date, dateTo: Date): boolean {

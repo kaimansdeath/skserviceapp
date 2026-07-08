@@ -167,3 +167,15 @@ export async function deleteManager(managerId: string) {
   revalidatePath("/", "layout");
   return { ok: true as const };
 }
+
+/** Передати всіх клієнтів одного менеджера іншому (напр., при звільненні) */
+export async function transferManagerClients(fromManagerId: string, toManagerId: string) {
+  await requireAdmin();
+  if (fromManagerId === toManagerId) return { error: "SAME" as const };
+  const res = await prisma.client.updateMany({
+    where: { managerId: fromManagerId },
+    data: { managerId: toManagerId },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true as const, count: res.count };
+}

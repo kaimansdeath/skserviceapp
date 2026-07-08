@@ -293,7 +293,21 @@ async function main() {
       createdById: admin.id,
     });
 
-    for (const t of [t1, t2, t3, t4]) {
+    const t5 = await mkTask({
+      brigadeId: brigadeFliaga.id,
+      clientId: clientLviv.id,
+      machineIds: [clientLviv.machines[0].id],
+      city: "Львів",
+      oblast: "Львівська",
+      invoiceId: await inv(clientLviv.id, "СФ-2026-0611"),
+      note: "Планове ТО (демо для архіву)",
+      dateFrom: day(-25),
+      dateTo: day(-23),
+      status: TaskStatus.DONE,
+      createdById: admin.id,
+    });
+
+    for (const t of [t1, t2, t3, t4, t5]) {
       await prisma.taskStatusLog.create({
         data: {
           taskId: t.id,

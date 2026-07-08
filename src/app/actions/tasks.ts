@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, canTouchTask } from "@/lib/authz";
 import { findOverlaps } from "@/lib/overlap";
-import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
+import { nextStatusesFor, REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
 import { notifyTaskAssigned } from "@/lib/telegram";
 
@@ -112,7 +112,9 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
       ...(statusChanged
         ? {
             status: input.status,
-            failureReason: input.status === "NOT_DONE" ? input.failureReason?.trim() || null : null,
+            failureReason: REASON_STATUSES.includes(input.status!)
+              ? input.failureReason?.trim() || null
+              : null,
           }
         : {}),
     },
@@ -125,7 +127,9 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
         userId: session.user.id,
         fromStatus: existing.status,
         toStatus: input.status!,
-        comment: input.status === "NOT_DONE" ? input.failureReason?.trim() || null : null,
+        comment: REASON_STATUSES.includes(input.status!)
+          ? input.failureReason?.trim() || null
+          : null,
         source: "WEB",
       },
     });
@@ -151,7 +155,8 @@ export async function changeTaskStatus(params: {
   const allowed = nextStatusesFor(session.user.role, task.status as TaskStatusValue);
   if (!allowed.includes(params.to)) return { error: "TRANSITION" as const };
 
-  if (params.to === "NOT_DONE" && !params.reason?.trim()) {
+  const needsReason = REASON_STATUSES.includes(params.to);
+  if (needsReason && !params.reason?.trim()) {
     return { error: "REASON_REQUIRED" as const };
   }
 
@@ -159,7 +164,7 @@ export async function changeTaskStatus(params: {
     where: { id: task.id },
     data: {
       status: params.to,
-      failureReason: params.to === "NOT_DONE" ? params.reason!.trim() : null,
+      failureReason: needsReason ? params.reason!.trim() : null,
     },
   });
   await prisma.taskStatusLog.create({
@@ -168,7 +173,7 @@ export async function changeTaskStatus(params: {
       userId: session.user.id,
       fromStatus: task.status,
       toStatus: params.to,
-      comment: params.to === "NOT_DONE" ? params.reason!.trim() : null,
+      comment: needsReason ? params.reason!.trim() : null,
       source: "WEB",
     },
   });

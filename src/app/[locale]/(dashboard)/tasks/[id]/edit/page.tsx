@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getTranslations, getLocale } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -16,13 +16,15 @@ export default async function EditTaskPage({
   const session = (await auth())!;
   if (session.user.role !== "ADMIN") redirect(`/${params.locale}/tasks/${params.id}`);
 
-  const [task, clients, brigades] = await Promise.all([
+  const locale = await getLocale();
+  const [task, clients, brigades, machineTypes] = await Promise.all([
     prisma.task.findUnique({ where: { id: params.id }, include: { machines: true } }),
     prisma.client.findMany({
       include: { machines: true, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
     }),
     prisma.brigade.findMany({ orderBy: { name: "asc" } }),
+    prisma.machineType.findMany({ orderBy: { nameUk: "asc" } }),
   ]);
   if (!task) notFound();
 
@@ -43,6 +45,10 @@ export default async function EditTaskPage({
           invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        machineTypes={machineTypes.map((tp: any) => ({
+          id: tp.id,
+          name: locale === "ru" ? tp.nameRu : tp.nameUk,
+        }))}
         initial={{
           id: task.id,
           taskType: task.taskType as any,

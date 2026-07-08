@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { createTask, updateTask, checkOverlap, type TaskInput } from "@/app/actions/tasks";
-import { saveClient, addInvoice } from "@/app/actions/clients";
+import { saveClient, addInvoice, saveMachine } from "@/app/actions/clients";
 import { ALL_STATUSES, TASK_TYPES, type TaskStatusValue } from "@/lib/taskStatus";
 import { OBLASTS } from "@/lib/oblasts";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
@@ -41,11 +41,13 @@ function OblastSelect({ value, onChange }: { value: string; onChange: (v: string
 export default function TaskForm({
   clients: clientsProp,
   brigades,
+  machineTypes,
   initial,
   isAdmin,
 }: {
   clients: ClientOption[];
   brigades: { id: string; name: string }[];
+  machineTypes: { id: string; name: string }[];
   initial?: Initial;
   isAdmin: boolean;
 }) {
@@ -86,6 +88,34 @@ export default function TaskForm({
   const [showQuickClient, setShowQuickClient] = useState(false);
   const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "" });
   const [qcPending, startQcTransition] = useTransition();
+
+  // Швидке додавання верстата
+  const [showQuickMachine, setShowQuickMachine] = useState(false);
+  const [qm, setQm] = useState({ typeId: "", model: "", serialNumber: "" });
+  const [qmPending, startQmTransition] = useTransition();
+
+  function quickAddMachine() {
+    if (!form.clientId) return;
+    startQmTransition(async () => {
+      const res = await saveMachine(null, {
+        clientId: form.clientId,
+        typeId: qm.typeId,
+        model: qm.model,
+        serialNumber: qm.serialNumber || null,
+        note: null,
+      });
+      if ("error" in res) return;
+      const label = `${qm.model.trim()}${qm.serialNumber.trim() ? ` (${qm.serialNumber.trim()})` : ""}`;
+      setClients((list) =>
+        list.map((c) =>
+          c.id === form.clientId ? { ...c, machines: [...c.machines, { id: res.id, label }] } : c
+        )
+      );
+      setForm((f) => ({ ...f, machineIds: [...f.machineIds, res.id] }));
+      setShowQuickMachine(false);
+      setQm({ typeId: "", model: "", serialNumber: "" });
+    });
+  }
 
   // Швидке додавання рахунку
   const [showQuickInvoice, setShowQuickInvoice] = useState(false);
@@ -351,7 +381,18 @@ export default function TaskForm({
           </select>
         </div>
         <div>
-          <span className="mb-1 block text-sm text-neutral-600">{t("fields.machines")}</span>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm text-neutral-600">{t("fields.machines")}</span>
+            {isAdmin && form.clientId && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand-dark hover:underline"
+                onClick={() => setShowQuickMachine((v) => !v)}
+              >
+                {showQuickMachine ? tc("cancel") : `+ ${t("fields.addMachine")}`}
+              </button>
+            )}
+          </div>
           <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-300 bg-white p-2">
             {!selectedClient || selectedClient.machines.length === 0 ? (
               <p className="px-1 py-1 text-sm text-neutral-400">{t("fields.noMachine")}</p>
@@ -376,6 +417,40 @@ export default function TaskForm({
               ))
             )}
           </div>
+          {showQuickMachine && (
+            <div className="mt-2 space-y-2 rounded-lg border border-brand/30 bg-brand/5 p-3">
+              <select
+                className={inputCls}
+                value={qm.typeId}
+                onChange={(e) => setQm({ ...qm, typeId: e.target.value })}
+              >
+                <option value="" disabled>{t("fields.machineType")}</option>
+                {machineTypes.map((tp) => (
+                  <option key={tp.id} value={tp.id}>{tp.name}</option>
+                ))}
+              </select>
+              <input
+                className={inputCls}
+                placeholder={t("fields.machineModel")}
+                value={qm.model}
+                onChange={(e) => setQm({ ...qm, model: e.target.value })}
+              />
+              <input
+                className={inputCls}
+                placeholder={t("fields.machineSerial")}
+                value={qm.serialNumber}
+                onChange={(e) => setQm({ ...qm, serialNumber: e.target.value })}
+              />
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={qmPending || !qm.typeId || !qm.model.trim()}
+                onClick={quickAddMachine}
+              >
+                {qmPending ? tc("saving") : tc("add")}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -489,7 +564,7 @@ export default function TaskForm({
               ))}
             </select>
           </Field>
-          {form.status === "NOT_DONE" && (
+          {["NOT_DONE", "PARTIALLY_DONE"].includes(form.status ?? "") && (
             <Field label={t("fields.failureReason")}>
               <input
                 className={inputCls}

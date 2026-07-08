@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formatDateUa, isOverdue, isToday, dateFieldFromYmd } from "@/lib/dates";
+import { formatDateUa, isOverdue, isToday, dateFieldFromYmd, archiveCutoff } from "@/lib/dates";
+import { FINAL_STATUSES } from "@/lib/taskStatus";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
 import TaskFilters from "@/components/tasks/TaskFilters";
@@ -30,6 +31,10 @@ export default async function TasksPage({
     prisma.manager.findMany({ orderBy: { name: "asc" } }),
     prisma.task.findMany({
       where: {
+        // архівні (завершені понад 14 днів тому) — у розділі «Архів»
+        NOT: {
+          AND: [{ status: { in: FINAL_STATUSES as any } }, { dateTo: { lt: archiveCutoff() } }],
+        },
         ...(brigadeFilter
           ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
           : {}),

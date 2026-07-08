@@ -1,4 +1,4 @@
-import { getTranslations } from "next-intl/server";
+import { getTranslations, getLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -11,12 +11,14 @@ export default async function NewTaskPage({ params }: { params: { locale: string
   const session = (await auth())!;
   if (session.user.role !== "ADMIN") redirect(`/${params.locale}/tasks`);
 
-  const [clients, brigades] = await Promise.all([
+  const locale = await getLocale();
+  const [clients, brigades, machineTypes] = await Promise.all([
     prisma.client.findMany({
       include: { machines: { include: { type: true } }, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
     }),
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    prisma.machineType.findMany({ orderBy: { nameUk: "asc" } }),
   ]);
 
   return (
@@ -36,6 +38,10 @@ export default async function NewTaskPage({ params }: { params: { locale: string
           invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        machineTypes={machineTypes.map((tp: any) => ({
+          id: tp.id,
+          name: locale === "ru" ? tp.nameRu : tp.nameUk,
+        }))}
       />
     </div>
   );

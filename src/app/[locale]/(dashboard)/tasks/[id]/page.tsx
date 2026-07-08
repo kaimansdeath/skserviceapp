@@ -90,7 +90,7 @@ export default async function TaskDetailPage({
     [t("tasks.fields.note"), task.note ?? "—"],
     [t("tasks.fields.createdBy"), task.createdBy.name],
   ];
-  if (task.status === "NOT_DONE" && task.failureReason) {
+  if (["NOT_DONE", "PARTIALLY_DONE"].includes(task.status) && task.failureReason) {
     rows.push([t("tasks.fields.failureReason"), task.failureReason]);
   }
 

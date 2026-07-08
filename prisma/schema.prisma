@@ -28,6 +28,7 @@ enum TaskStatus {
   EN_ROUTE // В дорозі
   ON_SITE // На об'єкті
   DONE // Виконано
+  PARTIALLY_DONE // Виконано не повністю (з коментарем)
   NOT_DONE // Не виконано (з причиною)
 }
 
