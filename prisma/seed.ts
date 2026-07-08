@@ -33,6 +33,7 @@ async function main() {
     ["Листозгинальний прес", "Листогибочный пресс"],
     ["Універсальний токарний верстат", "Универсальный токарный станок"],
     ["Електроерозійний верстат", "Электроэрозионный станок"],
+    ["Інше", "Другое"],
   ];
   const types: Record<string, string> = {};
   for (const [nameUk, nameRu] of typeNames) {
@@ -42,6 +43,20 @@ async function main() {
       create: { nameUk, nameRu },
     });
     types[nameUk] = t.id;
+  }
+
+  // --- Менеджери ---
+  for (const name of [
+    "Тимченко",
+    "Беспалих",
+    "Таймер",
+    "Левін",
+    "Коваленко",
+    "Гринь",
+    "Семенчак",
+    "Комаров",
+  ]) {
+    await prisma.manager.upsert({ where: { name }, update: {}, create: { name } });
   }
 
   // --- Бригади ---
@@ -200,7 +215,7 @@ async function main() {
     const mkTask = (data: {
       brigadeId: string;
       clientId: string;
-      machineId?: string;
+      machineIds?: string[];
       city: string;
       oblast: string;
       invoiceId?: string;
@@ -210,12 +225,21 @@ async function main() {
       status: TaskStatus;
       failureReason?: string;
       createdById: string;
-    }) => prisma.task.create({ data });
+    }) =>
+      prisma.task.create({
+        data: {
+          ...data,
+          machineIds: undefined,
+          machines: data.machineIds?.length
+            ? { connect: data.machineIds.map((id) => ({ id })) }
+            : undefined,
+        } as any,
+      });
 
     const t1 = await mkTask({
       brigadeId: brigadeFliaga.id,
       clientId: clientDnipro.id,
-      machineId: clientDnipro.machines[0].id,
+      machineIds: [clientDnipro.machines[0].id],
       city: "Дніпро",
       oblast: "Дніпропетровська",
       invoiceId: await inv(clientDnipro.id, "СФ-2026-0712"),
@@ -229,7 +253,7 @@ async function main() {
     const t2 = await mkTask({
       brigadeId: brigadeKyrylko.id,
       clientId: clientLviv.id,
-      machineId: clientLviv.machines[0].id,
+      machineIds: [clientLviv.machines[0].id],
       city: "Львів",
       oblast: "Львівська",
       invoiceId: await inv(clientLviv.id, "СФ-2026-0715"),
@@ -243,7 +267,7 @@ async function main() {
     const t3 = await mkTask({
       brigadeId: brigadeFliaga.id,
       clientId: clientKharkiv.id,
-      machineId: clientKharkiv.machines[0].id,
+      machineIds: [clientKharkiv.machines[0].id],
       city: "Харків",
       oblast: "Харківська",
       invoiceId: await inv(clientKharkiv.id, "СФ-2026-0698"),
@@ -257,7 +281,7 @@ async function main() {
     const t4 = await mkTask({
       brigadeId: brigadeKyrylko.id,
       clientId: clientDnipro.id,
-      machineId: clientDnipro.machines[1].id,
+      machineIds: [clientDnipro.machines[1].id],
       city: "Дніпро",
       oblast: "Дніпропетровська",
       invoiceId: await inv(clientDnipro.id, "СФ-2026-0701"),

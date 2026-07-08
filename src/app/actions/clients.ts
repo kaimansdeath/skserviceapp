@@ -10,6 +10,7 @@ const clientInput = z.object({
   edrpou: z.string().optional().nullable(),
   city: z.string().min(1),
   oblast: z.string().min(1),
+  managerId: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
 });
 
@@ -21,6 +22,7 @@ export async function saveClient(id: string | null, input: z.infer<typeof client
     edrpou: data.edrpou?.trim() || null,
     city: data.city.trim(),
     oblast: data.oblast.trim(),
+    managerId: data.managerId || null,
     note: data.note?.trim() || null,
   };
   const client = id
@@ -124,7 +126,7 @@ export async function deleteInvoice(invoiceId: string) {
 
 export async function deleteMachine(machineId: string) {
   await requireAdmin();
-  const count = await prisma.task.count({ where: { machineId } });
+  const count = await prisma.task.count({ where: { machines: { some: { id: machineId } } } });
   if (count > 0) return { error: "HAS_TASKS" as const };
   await prisma.machine.delete({ where: { id: machineId } });
   revalidatePath("/", "layout");
@@ -140,6 +142,28 @@ export async function deleteClient(clientId: string) {
     prisma.invoice.deleteMany({ where: { clientId } }),
     prisma.client.delete({ where: { id: clientId } }), // контакти видаляться каскадно
   ]);
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+// --- Менеджери (довідник) ---
+
+export async function addManager(name: string) {
+  await requireAdmin();
+  if (!name.trim()) return { error: "EMPTY" as const };
+  await prisma.manager.upsert({
+    where: { name: name.trim() },
+    update: {},
+    create: { name: name.trim() },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+export async function deleteManager(managerId: string) {
+  await requireAdmin();
+  // клієнти не видаляються — закріплення знімається (FK SET NULL)
+  await prisma.manager.delete({ where: { id: managerId } });
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

@@ -25,7 +25,7 @@ export default async function TaskDetailPage({
       secondBrigade: true,
       invoice: true,
       client: true,
-      machine: { include: { type: true } },
+      machines: { include: { type: true } },
       createdBy: true,
       statusLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
     },
@@ -63,12 +63,16 @@ export default async function TaskDetailPage({
       </Link>,
     ],
     [
-      t("tasks.fields.machine"),
-      task.machine ? (
-        <Link key="m" href={`/machines/${task.machine.id}`} className="text-brand-dark hover:underline">
-          {task.machine.model}
-          {task.machine.serialNumber ? ` (${task.machine.serialNumber})` : ""}
-        </Link>
+      t("tasks.fields.machines"),
+      task.machines.length > 0 ? (
+        <span key="m" className="flex flex-wrap gap-x-3 gap-y-1">
+          {task.machines.map((m: any) => (
+            <Link key={m.id} href={`/machines/${m.id}`} className="text-brand-dark hover:underline">
+              {m.model}
+              {m.serialNumber ? ` (${m.serialNumber})` : ""}
+            </Link>
+          ))}
+        </span>
       ) : (
         "—"
       ),

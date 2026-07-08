@@ -88,10 +88,12 @@ model Brigade {
 model Client {
   id       String  @id @default(cuid())
   name     String
-  edrpou   String? // код ЄДРПОУ
-  city     String
-  oblast   String
-  note     String?
+  edrpou    String? // код ЄДРПОУ
+  city      String
+  oblast    String
+  managerId String? // закріплений менеджер
+  manager   Manager? @relation(fields: [managerId], references: [id])
+  note      String?
 
   contacts ClientContact[]
   invoices Invoice[]
@@ -102,6 +104,16 @@ model Client {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+// Менеджери, за якими закріплені клієнти (розширюваний довідник)
+model Manager {
+  id   String @id @default(cuid())
+  name String @unique
+
+  clients Client[]
+
+  createdAt DateTime @default(now())
 }
 
 // Контактні особи клієнта
@@ -171,8 +183,7 @@ model Task {
   outsourceName   String? // обов'язково при executorType=OUTSOURCE
   clientId      String
   client        Client     @relation(fields: [clientId], references: [id])
-  machineId     String?
-  machine       Machine?   @relation(fields: [machineId], references: [id])
+  machines      Machine[] // верстати, за якими їде бригада (може бути кілька)
   city          String
   oblast        String
   invoiceId     String?

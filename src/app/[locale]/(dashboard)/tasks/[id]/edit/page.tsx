@@ -17,7 +17,7 @@ export default async function EditTaskPage({
   if (session.user.role !== "ADMIN") redirect(`/${params.locale}/tasks/${params.id}`);
 
   const [task, clients, brigades] = await Promise.all([
-    prisma.task.findUnique({ where: { id: params.id } }),
+    prisma.task.findUnique({ where: { id: params.id }, include: { machines: true } }),
     prisma.client.findMany({
       include: { machines: true, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
@@ -52,7 +52,7 @@ export default async function EditTaskPage({
           outsourceName: task.outsourceName,
           orderNumber: task.orderNumber,
           clientId: task.clientId,
-          machineId: task.machineId,
+          machineIds: task.machines.map((m: any) => m.id),
           city: task.city,
           oblast: task.oblast,
           invoiceId: task.invoiceId,

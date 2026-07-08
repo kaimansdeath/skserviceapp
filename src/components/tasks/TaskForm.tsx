@@ -20,6 +20,7 @@ export type ClientOption = {
 
 type Initial = Partial<TaskInput> & {
   id?: string;
+  machineIds?: string[];
   status?: TaskStatusValue;
   failureReason?: string | null;
 };
@@ -65,7 +66,7 @@ export default function TaskForm({
     secondBrigadeId: initial?.secondBrigadeId ?? "",
     outsourceName: initial?.outsourceName ?? "",
     clientId: initial?.clientId ?? "",
-    machineId: initial?.machineId ?? "",
+    machineIds: (initial?.machineIds ?? []) as string[],
     invoiceId: initial?.invoiceId ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
@@ -105,7 +106,7 @@ export default function TaskForm({
     setForm((f) => ({
       ...f,
       clientId,
-      machineId: "",
+      machineIds: [],
       invoiceId: "",
       city: c ? c.city : f.city,
       oblast: c ? c.oblast : f.oblast,
@@ -134,7 +135,7 @@ export default function TaskForm({
       setForm((f) => ({
         ...f,
         clientId: created.id,
-        machineId: "",
+        machineIds: [],
         invoiceId: "",
         city: created.city,
         oblast: created.oblast,
@@ -212,7 +213,7 @@ export default function TaskForm({
         secondBrigadeId: form.executorType === "BRIGADE" ? form.secondBrigadeId || null : null,
         outsourceName: form.executorType === "OUTSOURCE" ? form.outsourceName : null,
         clientId: form.clientId,
-        machineId: form.machineId || null,
+        machineIds: form.machineIds,
         invoiceId: form.invoiceId || null,
         city: form.city,
         oblast: form.oblast,
@@ -349,19 +350,33 @@ export default function TaskForm({
             ))}
           </select>
         </div>
-        <Field label={t("fields.machine")}>
-          <select
-            className={inputCls}
-            value={form.machineId}
-            onChange={(e) => set("machineId", e.target.value)}
-            disabled={!selectedClient}
-          >
-            <option value="">{t("fields.noMachine")}</option>
-            {selectedClient?.machines.map((m) => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
-        </Field>
+        <div>
+          <span className="mb-1 block text-sm text-neutral-600">{t("fields.machines")}</span>
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-300 bg-white p-2">
+            {!selectedClient || selectedClient.machines.length === 0 ? (
+              <p className="px-1 py-1 text-sm text-neutral-400">{t("fields.noMachine")}</p>
+            ) : (
+              selectedClient.machines.map((m) => (
+                <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-neutral-50">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#009C4B]"
+                    checked={form.machineIds.includes(m.id)}
+                    onChange={(e) =>
+                      set(
+                        "machineIds",
+                        e.target.checked
+                          ? [...form.machineIds, m.id]
+                          : form.machineIds.filter((id) => id !== m.id)
+                      )
+                    }
+                  />
+                  <span>{m.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {showQuickClient && (

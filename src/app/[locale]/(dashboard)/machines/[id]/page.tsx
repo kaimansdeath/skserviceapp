@@ -17,16 +17,15 @@ export default async function MachinePage({ params }: { params: { id: string } }
 
   const machine = await prisma.machine.findUnique({
     where: { id: params.id },
-    include: {
-      client: true,
-      type: true,
-      tasks: {
-        include: { brigade: true, invoice: true },
-        orderBy: { dateFrom: "desc" },
-      },
-    },
+    include: { client: true, type: true },
   });
   if (!machine) notFound();
+
+  const tasks = await prisma.task.findMany({
+    where: { machines: { some: { id: machine.id } } },
+    include: { brigade: true, secondBrigade: true, invoice: true },
+    orderBy: { dateFrom: "desc" },
+  });
 
   return (
     <div className="space-y-6">
@@ -59,6 +58,7 @@ export default async function MachinePage({ params }: { params: { id: string } }
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
                 <th className="px-3 py-2">{t("machines.historyCols.dates")}</th>
+                <th className="px-3 py-2">{t("tasks.fields.taskType")}</th>
                 <th className="px-3 py-2">{t("machines.historyCols.brigade")}</th>
                 <th className="px-3 py-2">{t("machines.historyCols.invoice")}</th>
                 <th className="px-3 py-2">{t("machines.historyCols.result")}</th>
@@ -66,24 +66,27 @@ export default async function MachinePage({ params }: { params: { id: string } }
               </tr>
             </thead>
             <tbody>
-              {machine.tasks.length === 0 && (
+              {tasks.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-neutral-400">
+                  <td colSpan={6} className="px-3 py-8 text-center text-neutral-400">
                     {t("machines.historyEmpty")}
                   </td>
                 </tr>
               )}
-              {machine.tasks.map((task: any) => (
+              {tasks.map((task: any) => (
                 <tr key={task.id} className="border-b border-neutral-100 last:border-0 align-top">
                   <td className="whitespace-nowrap px-3 py-2">
                     <Link href={`/tasks/${task.id}`} className="text-brand-dark hover:underline">
                       {formatDateUa(task.dateFrom)} — {formatDateUa(task.dateTo)}
                     </Link>
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-neutral-600">
+                    {t(`taskType.${task.taskType}` as any)}
+                  </td>
                   <td className="px-3 py-2">
                     {task.executorType === "OUTSOURCE"
                       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-                      : task.brigade?.name ?? "—"}
+                      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
                   </td>
                   <td className="px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2">

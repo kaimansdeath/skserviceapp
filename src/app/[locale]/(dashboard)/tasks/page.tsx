@@ -11,15 +11,23 @@ export const dynamic = "force-dynamic";
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: { brigade?: string; status?: string; from?: string; to?: string; city?: string };
+  searchParams: {
+    brigade?: string;
+    status?: string;
+    from?: string;
+    to?: string;
+    city?: string;
+    manager?: string;
+  };
 }) {
   const t = await getTranslations();
   const session = (await auth())!;
   const isBrigadier = session.user.role === "BRIGADE_LEADER";
   const brigadeFilter = isBrigadier ? session.user.brigadeId : searchParams.brigade || undefined;
 
-  const [brigades, tasks] = await Promise.all([
+  const [brigades, managers, tasks] = await Promise.all([
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    prisma.manager.findMany({ orderBy: { name: "asc" } }),
     prisma.task.findMany({
       where: {
         ...(brigadeFilter
@@ -29,10 +37,11 @@ export default async function TasksPage({
         ...(searchParams.city
           ? { city: { contains: searchParams.city, mode: "insensitive" } }
           : {}),
+        ...(searchParams.manager ? { client: { managerId: searchParams.manager } } : {}),
         ...(searchParams.from ? { dateTo: { gte: dateFieldFromYmd(searchParams.from) } } : {}),
         ...(searchParams.to ? { dateFrom: { lte: dateFieldFromYmd(searchParams.to) } } : {}),
       },
-      include: { brigade: true, secondBrigade: true, client: true, machine: true, invoice: true },
+      include: { brigade: true, secondBrigade: true, client: true, machines: true, invoice: true },
       orderBy: [{ dateFrom: "desc" }],
       take: 200,
     }),
@@ -54,6 +63,7 @@ export default async function TasksPage({
 
       <TaskFilters
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        managers={managers.map((m: any) => ({ id: m.id, name: m.name }))}
         lockBrigade={isBrigadier ? session.user.brigadeId : null}
       />
 
@@ -62,6 +72,7 @@ export default async function TasksPage({
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
               <th className="px-3 py-2">{t("tasks.fields.dates")}</th>
+              <th className="px-3 py-2">{t("tasks.fields.taskType")}</th>
               <th className="px-3 py-2">{t("tasks.fields.executor")}</th>
               <th className="px-3 py-2">{t("tasks.fields.client")}</th>
               <th className="px-3 py-2">{t("tasks.fields.city")}</th>
@@ -73,7 +84,7 @@ export default async function TasksPage({
           <tbody>
             {tasks.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-neutral-400">
                   {t("tasks.empty")}
                 </td>
               </tr>
@@ -104,6 +115,9 @@ export default async function TasksPage({
                       </span>
                     )}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-neutral-600">
+                    {t(`taskType.${task.taskType}` as any)}
+                  </td>
                   <td className="px-3 py-2">
                     {task.executorType === "OUTSOURCE" ? (
                       <span className="text-brand-orange">
@@ -118,7 +132,11 @@ export default async function TasksPage({
                   </td>
                   <td className="px-3 py-2">{task.client.name}</td>
                   <td className="whitespace-nowrap px-3 py-2">{task.city}</td>
-                  <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">
+                    {task.machines.length > 0
+                      ? task.machines.map((m: any) => m.model).join(", ")
+                      : "—"}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
                 </tr>

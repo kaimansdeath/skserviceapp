@@ -24,6 +24,12 @@ export default async function ClientsPage() {
           {isAdmin && (
             <>
               <Link
+                href="/clients/managers"
+                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
+              >
+                {t("clients.managers.title")}
+              </Link>
+              <Link
                 href="/clients/types"
                 className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
               >

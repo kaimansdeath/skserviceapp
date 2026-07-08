@@ -20,6 +20,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const client = await prisma.client.findUnique({
     where: { id: params.id },
     include: {
+      manager: true,
       contacts: { orderBy: { createdAt: "asc" } },
       invoices: {
         include: { _count: { select: { tasks: true } } },
@@ -27,7 +28,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
       },
       machines: { include: { type: true }, orderBy: { model: "asc" } },
       tasks: {
-        include: { brigade: true, machine: true, invoice: true },
+        include: { brigade: true, machines: true, invoice: true },
         orderBy: { dateFrom: "desc" },
         take: 50,
       },
@@ -43,6 +44,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
           <p className="text-sm text-neutral-500">
             {client.edrpou ? `ЄДРПОУ ${client.edrpou} · ` : ""}
             {client.city}, {client.oblast}
+            {client.manager ? ` · ${t("clients.fields.manager")}: ${client.manager.name}` : ""}
           </p>
           {client.note && <p className="mt-1 text-sm text-neutral-600">{client.note}</p>}
         </div>
@@ -156,7 +158,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
                       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
                       : task.brigade?.name ?? "—"}
                   </td>
-                  <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>
+                  <td className="px-3 py-2 text-neutral-500">
+                    {task.machines.length > 0
+                      ? task.machines.map((m: any) => m.model).join(", ")
+                      : "—"}
+                  </td>
                   <td className="px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
                 </tr>

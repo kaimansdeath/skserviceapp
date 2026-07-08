@@ -19,7 +19,7 @@ const taskInput = z
     secondBrigadeId: z.string().optional().nullable(),
     outsourceName: z.string().optional().nullable(),
     clientId: z.string().min(1),
-    machineId: z.string().optional().nullable(),
+    machineIds: z.array(z.string()).default([]),
     city: z.string().min(1),
     oblast: z.string().min(1),
     invoiceId: z.string().optional().nullable(),
@@ -50,7 +50,9 @@ export async function createTask(input: TaskInput) {
           : null,
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
-      machineId: data.machineId || null,
+      machines: data.machineIds.length
+        ? { connect: data.machineIds.map((id) => ({ id })) }
+        : undefined,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
       invoiceId: data.invoiceId || null,
@@ -99,7 +101,7 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
           : null,
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
-      machineId: data.machineId || null,
+      machines: { set: data.machineIds.map((id) => ({ id })) },
       city: data.city.trim(),
       oblast: data.oblast.trim(),
       invoiceId: data.invoiceId || null,

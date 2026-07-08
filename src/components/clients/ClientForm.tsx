@@ -13,10 +13,17 @@ type Initial = {
   edrpou?: string | null;
   city?: string;
   oblast?: string;
+  managerId?: string | null;
   note?: string | null;
 };
 
-export default function ClientForm({ initial }: { initial?: Initial }) {
+export default function ClientForm({
+  initial,
+  managers,
+}: {
+  initial?: Initial;
+  managers: { id: string; name: string }[];
+}) {
   const t = useTranslations("clients.fields");
   const tc = useTranslations("common");
   const locale = useLocale();
@@ -28,6 +35,7 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
     edrpou: initial?.edrpou ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
+    managerId: initial?.managerId ?? "",
     note: initial?.note ?? "",
   });
 
@@ -40,6 +48,7 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
       const res = await saveClient(initial?.id ?? null, {
         ...form,
         edrpou: form.edrpou || null,
+        managerId: form.managerId || null,
         note: form.note || null,
       });
       if ("error" in res) {
@@ -72,6 +81,18 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
             <option value="" disabled>—</option>
             {oblastOptions.map((o) => (
               <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("manager")}>
+          <select
+            className={inputCls}
+            value={form.managerId}
+            onChange={(e) => setForm({ ...form, managerId: e.target.value })}
+          >
+            <option value="">—</option>
+            {managers.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
         </Field>

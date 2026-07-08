@@ -6,12 +6,15 @@ import { ALL_STATUSES } from "@/lib/taskStatus";
 import { inputCls, btnSecondary } from "@/components/ui/Field";
 
 type Brigade = { id: string; name: string };
+type Manager = { id: string; name: string };
 
 export default function TaskFilters({
   brigades,
+  managers,
   lockBrigade,
 }: {
   brigades: Brigade[];
+  managers: Manager[];
   lockBrigade?: string | null;
 }) {
   const t = useTranslations("tasks.filters");
@@ -44,6 +47,19 @@ export default function TaskFilters({
           </select>
         </label>
       )}
+      <label className="block">
+        <span className="mb-1 block text-xs text-neutral-500">{t("manager")}</span>
+        <select
+          className={inputCls + " w-40"}
+          value={sp.get("manager") ?? ""}
+          onChange={(e) => setParam("manager", e.target.value)}
+        >
+          <option value="">{t("all")}</option>
+          {managers.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+      </label>
       <label className="block">
         <span className="mb-1 block text-xs text-neutral-500">{t("status")}</span>
         <select
