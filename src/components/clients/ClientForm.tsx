@@ -4,11 +4,13 @@ import { useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { saveClient } from "@/app/actions/clients";
+import { OBLASTS } from "@/lib/oblasts";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
 type Initial = {
   id?: string;
   name?: string;
+  edrpou?: string | null;
   city?: string;
   oblast?: string;
   contacts?: string | null;
@@ -24,16 +26,25 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
   const [error, setError] = useState(false);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
+    edrpou: initial?.edrpou ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
     contacts: initial?.contacts ?? "",
     note: initial?.note ?? "",
   });
 
+  const oblastOptions: string[] = [...OBLASTS];
+  if (form.oblast && !oblastOptions.includes(form.oblast)) oblastOptions.unshift(form.oblast);
+
   function submit() {
     setError(false);
     startTransition(async () => {
-      const res = await saveClient(initial?.id ?? null, form);
+      const res = await saveClient(initial?.id ?? null, {
+        ...form,
+        edrpou: form.edrpou || null,
+        contacts: form.contacts || null,
+        note: form.note || null,
+      });
       if ("error" in res) {
         setError(true);
         return;
@@ -45,15 +56,27 @@ export default function ClientForm({ initial }: { initial?: Initial }) {
 
   return (
     <div className="max-w-xl space-y-4">
-      <Field label={t("name")}>
-        <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      </Field>
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t("name")}>
+          <input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </Field>
+        <Field label={t("edrpou")}>
+          <input className={inputCls} value={form.edrpou} onChange={(e) => setForm({ ...form, edrpou: e.target.value })} />
+        </Field>
         <Field label={t("city")}>
           <input className={inputCls} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         </Field>
         <Field label={t("oblast")}>
-          <input className={inputCls} value={form.oblast} onChange={(e) => setForm({ ...form, oblast: e.target.value })} />
+          <select
+            className={inputCls}
+            value={form.oblast}
+            onChange={(e) => setForm({ ...form, oblast: e.target.value })}
+          >
+            <option value="" disabled>—</option>
+            {oblastOptions.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
         </Field>
       </div>
       <Field label={t("contacts")}>

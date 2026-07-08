@@ -80,7 +80,11 @@ export default async function MachinePage({ params }: { params: { id: string } }
                       {formatDateUa(task.dateFrom)} — {formatDateUa(task.dateTo)}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">{task.brigade.name}</td>
+                  <td className="px-3 py-2">
+                    {task.executorType === "OUTSOURCE"
+                      ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
+                      : task.brigade?.name ?? "—"}
+                  </td>
                   <td className="px-3 py-2">{task.invoiceNumber ?? "—"}</td>
                   <td className="px-3 py-2">
                     <StatusBadge status={task.status} />

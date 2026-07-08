@@ -9,17 +9,24 @@ import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
 import { notifyTaskAssigned } from "@/lib/telegram";
 
-const taskInput = z.object({
-  brigadeId: z.string().min(1),
-  clientId: z.string().min(1),
-  machineId: z.string().optional().nullable(),
-  city: z.string().min(1),
-  oblast: z.string().min(1),
-  invoiceNumber: z.string().optional().nullable(),
-  note: z.string().optional().nullable(),
-  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-});
+const taskInput = z
+  .object({
+    executorType: z.enum(["BRIGADE", "OUTSOURCE"]).default("BRIGADE"),
+    brigadeId: z.string().optional().nullable(),
+    outsourceName: z.string().optional().nullable(),
+    clientId: z.string().min(1),
+    machineId: z.string().optional().nullable(),
+    city: z.string().min(1),
+    oblast: z.string().min(1),
+    invoiceNumber: z.string().optional().nullable(),
+    orderNumber: z.string().optional().nullable(),
+    note: z.string().optional().nullable(),
+    dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  })
+  .refine((d) => (d.executorType === "BRIGADE" ? !!d.brigadeId : !!d.outsourceName?.trim()), {
+    message: "EXECUTOR_REQUIRED",
+  });
 
 export type TaskInput = z.infer<typeof taskInput>;
 
@@ -30,12 +37,15 @@ export async function createTask(input: TaskInput) {
 
   const task = await prisma.task.create({
     data: {
-      brigadeId: data.brigadeId,
+      executorType: data.executorType,
+      brigadeId: data.executorType === "BRIGADE" ? data.brigadeId! : null,
+      outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machineId: data.machineId || null,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
       invoiceNumber: data.invoiceNumber?.trim() || null,
+      orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,
       dateFrom: dateFieldFromYmd(data.dateFrom),
       dateTo: dateFieldFromYmd(data.dateTo),
@@ -65,17 +75,21 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
   if (!existing) return { error: "NOT_FOUND" as const };
 
   const statusChanged = input.status && input.status !== existing.status;
-  const brigadeChanged = data.brigadeId !== existing.brigadeId;
+  const newBrigadeId = data.executorType === "BRIGADE" ? data.brigadeId! : null;
+  const brigadeChanged = newBrigadeId !== existing.brigadeId && newBrigadeId !== null;
 
   await prisma.task.update({
     where: { id: taskId },
     data: {
-      brigadeId: data.brigadeId,
+      executorType: data.executorType,
+      brigadeId: newBrigadeId,
+      outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machineId: data.machineId || null,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
       invoiceNumber: data.invoiceNumber?.trim() || null,
+      orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,
       dateFrom: dateFieldFromYmd(data.dateFrom),
       dateTo: dateFieldFromYmd(data.dateTo),
@@ -116,7 +130,10 @@ export async function changeTaskStatus(params: {
   const task = await prisma.task.findUnique({ where: { id: params.taskId } });
   if (!task) return { error: "NOT_FOUND" as const };
 
-  if (!canTouchBrigade(session as any, task.brigadeId)) return { error: "FORBIDDEN" as const };
+  const canTouch =
+    session.user.role === "ADMIN" ||
+    (task.brigadeId !== null && canTouchBrigade(session as any, task.brigadeId));
+  if (!canTouch) return { error: "FORBIDDEN" as const };
 
   const allowed = nextStatusesFor(session.user.role, task.status as TaskStatusValue);
   if (!allowed.includes(params.to)) return { error: "TRANSITION" as const };
@@ -169,4 +186,14 @@ export async function checkOverlap(params: {
     dateFrom: toYmd(t.dateFrom),
     dateTo: toYmd(t.dateTo),
   }));
+}
+
+/** Видалення задачі — лише керівник відділу. Історія статусів видаляється каскадно. */
+export async function deleteTask(taskId: string) {
+  await requireAdmin();
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) return { error: "NOT_FOUND" as const };
+  await prisma.task.delete({ where: { id: taskId } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
 }

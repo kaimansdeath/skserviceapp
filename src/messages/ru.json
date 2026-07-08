@@ -81,14 +81,23 @@
       "dates": "Даты",
       "status": "Статус",
       "failureReason": "Причина невыполнения",
-      "createdBy": "Создал"
+      "createdBy": "Создал",
+      "executor": "Исполнитель",
+      "outsourceName": "Подрядчик (аутсорс)",
+      "orderNumber": "№ приказа о командировке"
     },
     "overlapWarning": "Внимание: пересечение дат с другими задачами этой бригады",
     "dateRangeError": "Дата окончания раньше даты начала",
     "statusLog": "История статусов",
     "changeStatus": "Изменить статус",
     "notDoneReasonPrompt": "Укажите причину невыполнения:",
-    "reasonRequired": "Причина обязательна"
+    "reasonRequired": "Причина обязательна",
+    "executor": {
+      "BRIGADE": "Бригада",
+      "OUTSOURCE": "Аутсорс"
+    },
+    "delete": "Удалить задачу",
+    "deleteConfirm": "Удалить задачу безвозвратно? История статусов также будет удалена."
   },
   "clients": {
     "title": "Клиенты",
@@ -100,7 +109,8 @@
       "city": "Город",
       "oblast": "Область",
       "contacts": "Контакты",
-      "note": "Примечание"
+      "note": "Примечание",
+      "edrpou": "ЕГРПОУ"
     },
     "machinesCount": "Станков",
     "machines": "Станки клиента",

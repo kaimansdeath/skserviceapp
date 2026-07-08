@@ -81,14 +81,23 @@
       "dates": "Дати",
       "status": "Статус",
       "failureReason": "Причина невиконання",
-      "createdBy": "Створив"
+      "createdBy": "Створив",
+      "executor": "Виконавець",
+      "outsourceName": "Підрядник (аутсорс)",
+      "orderNumber": "№ наказу про відрядження"
     },
     "overlapWarning": "Увага: перетин дат з іншими задачами цієї бригади",
     "dateRangeError": "Дата завершення раніше за дату початку",
     "statusLog": "Історія статусів",
     "changeStatus": "Змінити статус",
     "notDoneReasonPrompt": "Вкажіть причину невиконання:",
-    "reasonRequired": "Причина обов'язкова"
+    "reasonRequired": "Причина обов'язкова",
+    "executor": {
+      "BRIGADE": "Бригада",
+      "OUTSOURCE": "Аутсорс"
+    },
+    "delete": "Видалити задачу",
+    "deleteConfirm": "Видалити задачу безповоротно? Історія статусів також буде видалена."
   },
   "clients": {
     "title": "Клієнти",
@@ -100,7 +109,8 @@
       "city": "Місто",
       "oblast": "Область",
       "contacts": "Контакти",
-      "note": "Примітка"
+      "note": "Примітка",
+      "edrpou": "ЄДРПОУ"
     },
     "machinesCount": "Верстатів",
     "machines": "Верстати клієнта",

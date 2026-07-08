@@ -6,6 +6,7 @@ import { formatDateUa, isOverdue } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatusChanger from "@/components/tasks/StatusChanger";
+import DeleteTaskButton from "@/components/tasks/DeleteTaskButton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,17 @@ export default async function TaskDetailPage({
   const overdue = isOverdue(task.dateTo, task.status);
   const canChangeStatus =
     session.user.role === "ADMIN" ||
-    (session.user.role === "BRIGADE_LEADER" && session.user.brigadeId === task.brigadeId);
+    (session.user.role === "BRIGADE_LEADER" &&
+      task.brigadeId !== null &&
+      session.user.brigadeId === task.brigadeId);
 
   const rows: Array<[string, React.ReactNode]> = [
-    [t("tasks.fields.brigade"), task.brigade.name],
+    [
+      t("tasks.fields.executor"),
+      task.executorType === "OUTSOURCE"
+        ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
+        : task.brigade?.name ?? "—",
+    ],
     [
       t("tasks.fields.client"),
       <Link key="c" href={`/clients/${task.clientId}`} className="text-brand-dark hover:underline">
@@ -60,6 +68,7 @@ export default async function TaskDetailPage({
     ],
     [t("tasks.fields.city"), `${task.city}, ${task.oblast}`],
     [t("tasks.fields.invoice"), task.invoiceNumber ?? "—"],
+    [t("tasks.fields.orderNumber"), task.orderNumber ?? "—"],
     [
       t("tasks.fields.dates"),
       <span key="d" className={overdue ? "font-semibold text-red-600" : ""}>
@@ -82,12 +91,15 @@ export default async function TaskDetailPage({
           <StatusBadge status={task.status} />
         </div>
         {session.user.role === "ADMIN" && (
-          <Link
-            href={`/tasks/${task.id}/edit`}
-            className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
-          >
-            {t("common.edit")}
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href={`/tasks/${task.id}/edit`}
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
+            >
+              {t("common.edit")}
+            </Link>
+            <DeleteTaskButton taskId={task.id} />
+          </div>
         )}
       </div>
 

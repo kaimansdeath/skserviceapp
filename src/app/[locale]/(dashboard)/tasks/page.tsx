@@ -60,7 +60,7 @@ export default async function TasksPage({
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-500">
               <th className="px-3 py-2">{t("tasks.fields.dates")}</th>
-              <th className="px-3 py-2">{t("tasks.fields.brigade")}</th>
+              <th className="px-3 py-2">{t("tasks.fields.executor")}</th>
               <th className="px-3 py-2">{t("tasks.fields.client")}</th>
               <th className="px-3 py-2">{t("tasks.fields.city")}</th>
               <th className="px-3 py-2">{t("tasks.fields.machine")}</th>
@@ -102,7 +102,15 @@ export default async function TasksPage({
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2">{task.brigade.name}</td>
+                  <td className="px-3 py-2">
+                    {task.executorType === "OUTSOURCE" ? (
+                      <span className="text-brand-orange">
+                        {t("tasks.executor.OUTSOURCE")}: {task.outsourceName ?? "—"}
+                      </span>
+                    ) : (
+                      task.brigade?.name ?? "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2">{task.client.name}</td>
                   <td className="whitespace-nowrap px-3 py-2">{task.city}</td>
                   <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>

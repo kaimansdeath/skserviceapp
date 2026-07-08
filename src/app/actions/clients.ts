@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/authz";
 
 const clientInput = z.object({
   name: z.string().min(1),
+  edrpou: z.string().optional().nullable(),
   city: z.string().min(1),
   oblast: z.string().min(1),
   contacts: z.string().optional().nullable(),
@@ -18,6 +19,7 @@ export async function saveClient(id: string | null, input: z.infer<typeof client
   const data = clientInput.parse(input);
   const payload = {
     name: data.name.trim(),
+    edrpou: data.edrpou?.trim() || null,
     city: data.city.trim(),
     oblast: data.oblast.trim(),
     contacts: data.contacts?.trim() || null,

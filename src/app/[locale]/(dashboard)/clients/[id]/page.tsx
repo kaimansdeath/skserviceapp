@@ -33,6 +33,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
         <div>
           <h1 className="text-xl font-bold">{client.name}</h1>
           <p className="text-sm text-neutral-500">
+            {client.edrpou ? `ЄДРПОУ ${client.edrpou} · ` : ""}
             {client.city}, {client.oblast}
             {client.contacts ? ` · ${client.contacts}` : ""}
           </p>
@@ -121,7 +122,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
                       {formatDateUa(task.dateFrom)} — {formatDateUa(task.dateTo)}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">{task.brigade.name}</td>
+                  <td className="px-3 py-2">
+                    {task.executorType === "OUTSOURCE"
+                      ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
+                      : task.brigade?.name ?? "—"}
+                  </td>
                   <td className="px-3 py-2 text-neutral-500">{task.machine?.model ?? "—"}</td>
                   <td className="px-3 py-2">{task.invoiceNumber ?? "—"}</td>
                   <td className="px-3 py-2"><StatusBadge status={task.status} /></td>

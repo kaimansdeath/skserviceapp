@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { createTask, updateTask, checkOverlap, type TaskInput } from "@/app/actions/tasks";
+import { saveClient } from "@/app/actions/clients";
 import { ALL_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
+import { OBLASTS } from "@/lib/oblasts";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
 export type ClientOption = {
@@ -21,8 +23,27 @@ type Initial = Partial<TaskInput> & {
   failureReason?: string | null;
 };
 
+function OblastSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options: string[] = [...OBLASTS];
+  if (value && !options.includes(value)) options.unshift(value); // старі значення з БД
+  return (
+    <select className={inputCls} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="" disabled>—</option>
+      {options.map((o) => (
+        <option key={o} value={o}>{o}</option>
+      ))}
+    </select>
+  );
+}
+
 export default function TaskForm({
-  clients,
+  clients: clientsProp,
   brigades,
   initial,
   isAdmin,
@@ -33,31 +54,39 @@ export default function TaskForm({
   isAdmin: boolean;
 }) {
   const t = useTranslations("tasks");
+  const tcl = useTranslations("clients");
   const tc = useTranslations("common");
   const ts = useTranslations("status");
   const locale = useLocale();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [form, setForm] = useState<TaskInput & { status?: TaskStatusValue; failureReason?: string }>(
-    {
-      brigadeId: initial?.brigadeId ?? "",
-      clientId: initial?.clientId ?? "",
-      machineId: initial?.machineId ?? "",
-      city: initial?.city ?? "",
-      oblast: initial?.oblast ?? "",
-      invoiceNumber: initial?.invoiceNumber ?? "",
-      note: initial?.note ?? "",
-      dateFrom: initial?.dateFrom ?? "",
-      dateTo: initial?.dateTo ?? "",
-      status: initial?.status,
-      failureReason: initial?.failureReason ?? "",
-    }
-  );
+  const [clients, setClients] = useState<ClientOption[]>(clientsProp);
+  const [form, setForm] = useState({
+    executorType: (initial?.executorType ?? "BRIGADE") as "BRIGADE" | "OUTSOURCE",
+    brigadeId: initial?.brigadeId ?? "",
+    outsourceName: initial?.outsourceName ?? "",
+    clientId: initial?.clientId ?? "",
+    machineId: initial?.machineId ?? "",
+    city: initial?.city ?? "",
+    oblast: initial?.oblast ?? "",
+    invoiceNumber: initial?.invoiceNumber ?? "",
+    orderNumber: initial?.orderNumber ?? "",
+    note: initial?.note ?? "",
+    dateFrom: initial?.dateFrom ?? "",
+    dateTo: initial?.dateTo ?? "",
+    status: initial?.status,
+    failureReason: initial?.failureReason ?? "",
+  });
   const [overlaps, setOverlaps] = useState<
     { id: string; client: string; city: string; dateFrom: string; dateTo: string }[]
   >([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Швидке додавання клієнта
+  const [showQuickClient, setShowQuickClient] = useState(false);
+  const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "", contacts: "" });
+  const [qcPending, startQcTransition] = useTransition();
 
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === form.clientId),
@@ -74,16 +103,46 @@ export default function TaskForm({
       ...f,
       clientId,
       machineId: "",
-      // підставляємо місто/область клієнта, якщо поля порожні або збігалися з попереднім клієнтом
       city: c ? c.city : f.city,
       oblast: c ? c.oblast : f.oblast,
     }));
   }
 
-  // Перевірка перетину дат — попередження, не блокування
+  function quickAddClient() {
+    startQcTransition(async () => {
+      const res = await saveClient(null, {
+        name: qc.name,
+        edrpou: qc.edrpou || null,
+        city: qc.city,
+        oblast: qc.oblast,
+        contacts: qc.contacts || null,
+        note: null,
+      });
+      if ("error" in res) return;
+      const created: ClientOption = {
+        id: res.id,
+        name: qc.name.trim(),
+        city: qc.city.trim(),
+        oblast: qc.oblast,
+        machines: [],
+      };
+      setClients((list) => [...list, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm((f) => ({ ...f, clientId: created.id, machineId: "", city: created.city, oblast: created.oblast }));
+      setShowQuickClient(false);
+      setQc({ name: "", edrpou: "", city: "", oblast: "", contacts: "" });
+    });
+  }
+
+  // Перевірка перетину дат (лише для бригад) — попередження, не блокування
   useEffect(() => {
     let cancelled = false;
-    if (form.brigadeId && form.dateFrom && form.dateTo && form.dateTo >= form.dateFrom) {
+    if (
+      form.executorType === "BRIGADE" &&
+      form.brigadeId &&
+      form.dateFrom &&
+      form.dateTo &&
+      form.dateTo >= form.dateFrom
+    ) {
       checkOverlap({
         brigadeId: form.brigadeId,
         dateFrom: form.dateFrom,
@@ -98,10 +157,9 @@ export default function TaskForm({
     return () => {
       cancelled = true;
     };
-  }, [form.brigadeId, form.dateFrom, form.dateTo, initial?.id]);
+  }, [form.executorType, form.brigadeId, form.dateFrom, form.dateTo, initial?.id]);
 
-  const dateRangeInvalid =
-    !!form.dateFrom && !!form.dateTo && form.dateTo < form.dateFrom;
+  const dateRangeInvalid = !!form.dateFrom && !!form.dateTo && form.dateTo < form.dateFrom;
 
   function submit() {
     setError(null);
@@ -111,12 +169,15 @@ export default function TaskForm({
     }
     startTransition(async () => {
       const payload: TaskInput = {
-        brigadeId: form.brigadeId,
+        executorType: form.executorType,
+        brigadeId: form.executorType === "BRIGADE" ? form.brigadeId : null,
+        outsourceName: form.executorType === "OUTSOURCE" ? form.outsourceName : null,
         clientId: form.clientId,
         machineId: form.machineId || null,
         city: form.city,
         oblast: form.oblast,
         invoiceNumber: form.invoiceNumber || null,
+        orderNumber: form.orderNumber || null,
         note: form.note || null,
         dateFrom: form.dateFrom,
         dateTo: form.dateTo,
@@ -137,22 +198,70 @@ export default function TaskForm({
     });
   }
 
+  const executorFilled =
+    form.executorType === "BRIGADE" ? !!form.brigadeId : !!form.outsourceName.trim();
+
   return (
     <div className="max-w-2xl space-y-4">
+      {/* Виконавець: бригада або аутсорс */}
+      <div>
+        <span className="mb-1 block text-sm text-neutral-600">{t("fields.executor")}</span>
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 text-sm font-semibold">
+          {(["BRIGADE", "OUTSOURCE"] as const).map((et) => (
+            <button
+              key={et}
+              type="button"
+              onClick={() => set("executorType", et)}
+              className={
+                "rounded-md px-3 py-1.5 transition " +
+                (form.executorType === et
+                  ? "bg-brand text-white"
+                  : "text-neutral-500 hover:text-neutral-800")
+              }
+            >
+              {t(`executor.${et}` as any)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t("fields.brigade")}>
-          <select
-            className={inputCls}
-            value={form.brigadeId}
-            onChange={(e) => set("brigadeId", e.target.value)}
-          >
-            <option value="" disabled>—</option>
-            {brigades.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t("fields.client")}>
+        {form.executorType === "BRIGADE" ? (
+          <Field label={t("fields.brigade")}>
+            <select
+              className={inputCls}
+              value={form.brigadeId}
+              onChange={(e) => set("brigadeId", e.target.value)}
+            >
+              <option value="" disabled>—</option>
+              {brigades.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </Field>
+        ) : (
+          <Field label={t("fields.outsourceName")}>
+            <input
+              className={inputCls}
+              value={form.outsourceName}
+              onChange={(e) => set("outsourceName", e.target.value)}
+            />
+          </Field>
+        )}
+
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm text-neutral-600">{t("fields.client")}</span>
+            {isAdmin && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-brand-dark hover:underline"
+                onClick={() => setShowQuickClient((v) => !v)}
+              >
+                {showQuickClient ? tc("cancel") : `+ ${tcl("new")}`}
+              </button>
+            )}
+          </div>
           <select
             className={inputCls}
             value={form.clientId}
@@ -163,7 +272,41 @@ export default function TaskForm({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-        </Field>
+        </div>
+      </div>
+
+      {showQuickClient && (
+        <div className="space-y-3 rounded-lg border border-brand/30 bg-brand/5 p-3">
+          <p className="text-sm font-semibold text-brand-dark">{tcl("new")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={tcl("fields.name")}>
+              <input className={inputCls} value={qc.name} onChange={(e) => setQc({ ...qc, name: e.target.value })} />
+            </Field>
+            <Field label={tcl("fields.edrpou")}>
+              <input className={inputCls} value={qc.edrpou} onChange={(e) => setQc({ ...qc, edrpou: e.target.value })} />
+            </Field>
+            <Field label={tcl("fields.city")}>
+              <input className={inputCls} value={qc.city} onChange={(e) => setQc({ ...qc, city: e.target.value })} />
+            </Field>
+            <Field label={tcl("fields.oblast")}>
+              <OblastSelect value={qc.oblast} onChange={(v) => setQc({ ...qc, oblast: v })} />
+            </Field>
+          </div>
+          <Field label={tcl("fields.contacts")}>
+            <input className={inputCls} value={qc.contacts} onChange={(e) => setQc({ ...qc, contacts: e.target.value })} />
+          </Field>
+          <button
+            type="button"
+            className={btnPrimary}
+            disabled={qcPending || !qc.name.trim() || !qc.city.trim() || !qc.oblast}
+            onClick={quickAddClient}
+          >
+            {qcPending ? tc("saving") : tc("add")}
+          </button>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t("fields.machine")}>
           <select
             className={inputCls}
@@ -180,39 +323,28 @@ export default function TaskForm({
         <Field label={t("fields.invoice")}>
           <input
             className={inputCls}
-            value={form.invoiceNumber ?? ""}
+            value={form.invoiceNumber}
             onChange={(e) => set("invoiceNumber", e.target.value)}
           />
         </Field>
-        <Field label={t("fields.city")}>
+        <Field label={t("fields.orderNumber")}>
           <input
             className={inputCls}
-            value={form.city}
-            onChange={(e) => set("city", e.target.value)}
+            value={form.orderNumber}
+            onChange={(e) => set("orderNumber", e.target.value)}
           />
+        </Field>
+        <Field label={t("fields.city")}>
+          <input className={inputCls} value={form.city} onChange={(e) => set("city", e.target.value)} />
         </Field>
         <Field label={t("fields.oblast")}>
-          <input
-            className={inputCls}
-            value={form.oblast}
-            onChange={(e) => set("oblast", e.target.value)}
-          />
+          <OblastSelect value={form.oblast} onChange={(v) => set("oblast", v)} />
         </Field>
         <Field label={t("fields.dateFrom")}>
-          <input
-            type="date"
-            className={inputCls}
-            value={form.dateFrom}
-            onChange={(e) => set("dateFrom", e.target.value)}
-          />
+          <input type="date" className={inputCls} value={form.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} />
         </Field>
         <Field label={t("fields.dateTo")}>
-          <input
-            type="date"
-            className={inputCls}
-            value={form.dateTo}
-            onChange={(e) => set("dateTo", e.target.value)}
-          />
+          <input type="date" className={inputCls} value={form.dateTo} onChange={(e) => set("dateTo", e.target.value)} />
         </Field>
       </div>
 
@@ -220,7 +352,7 @@ export default function TaskForm({
         <textarea
           className={inputCls}
           rows={3}
-          value={form.note ?? ""}
+          value={form.note}
           onChange={(e) => set("note", e.target.value)}
         />
       </Field>
@@ -242,7 +374,7 @@ export default function TaskForm({
             <Field label={t("fields.failureReason")}>
               <input
                 className={inputCls}
-                value={form.failureReason ?? ""}
+                value={form.failureReason}
                 onChange={(e) => set("failureReason", e.target.value)}
               />
             </Field>
@@ -274,7 +406,7 @@ export default function TaskForm({
           className={btnPrimary}
           disabled={
             pending ||
-            !form.brigadeId ||
+            !executorFilled ||
             !form.clientId ||
             !form.city ||
             !form.oblast ||

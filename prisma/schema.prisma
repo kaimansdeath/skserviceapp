@@ -30,6 +30,11 @@ enum TaskStatus {
   NOT_DONE // Не виконано (з причиною)
 }
 
+enum ExecutorType {
+  BRIGADE // виконує бригада
+  OUTSOURCE // виконує зовнішній підрядник
+}
+
 enum LogSource {
   WEB
   TELEGRAM
@@ -72,6 +77,7 @@ model Brigade {
 model Client {
   id       String  @id @default(cuid())
   name     String
+  edrpou   String? // код ЄДРПОУ
   city     String
   oblast   String
   contacts String?
@@ -114,9 +120,11 @@ model Machine {
 }
 
 model Task {
-  id            String     @id @default(cuid())
-  brigadeId     String
-  brigade       Brigade    @relation(fields: [brigadeId], references: [id])
+  id            String       @id @default(cuid())
+  executorType  ExecutorType @default(BRIGADE)
+  brigadeId     String? // обов'язково при executorType=BRIGADE
+  brigade       Brigade?     @relation(fields: [brigadeId], references: [id])
+  outsourceName String? // обов'язково при executorType=OUTSOURCE
   clientId      String
   client        Client     @relation(fields: [clientId], references: [id])
   machineId     String?
@@ -124,6 +132,7 @@ model Task {
   city          String
   oblast        String
   invoiceNumber String?
+  orderNumber   String? // № наказу про відрядження
   note          String?
   dateFrom      DateTime   @db.Date
   dateTo        DateTime   @db.Date

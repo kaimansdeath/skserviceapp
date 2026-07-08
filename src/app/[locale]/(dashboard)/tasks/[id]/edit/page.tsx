@@ -41,7 +41,10 @@ export default async function EditTaskPage({
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
         initial={{
           id: task.id,
+          executorType: task.executorType as any,
           brigadeId: task.brigadeId,
+          outsourceName: task.outsourceName,
+          orderNumber: task.orderNumber,
           clientId: task.clientId,
           machineId: task.machineId,
           city: task.city,
