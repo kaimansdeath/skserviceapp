@@ -115,7 +115,7 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
                   <td className="px-3 py-2">{t(`roles.${u.role}` as any)}</td>
                   <td className="px-3 py-2">{u.brigade?.name ?? "—"}</td>
                   <td className="px-3 py-2">
-                    {u.role === "BRIGADE_LEADER" ? (
+                    {u.role === "BRIGADE_LEADER" || u.role === "ADMIN" ? (
                       <span
                         className={
                           "rounded-full px-2 py-0.5 text-xs font-semibold " +
@@ -135,7 +135,7 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
                       <UserRowActions
                         userId={u.id}
                         isActive={u.isActive}
-                        isBrigadier={u.role === "BRIGADE_LEADER"}
+                        canLinkTg={u.role === "BRIGADE_LEADER" || u.role === "ADMIN"}
                         isSelf={u.id === session.user.id}
                       />
                     </td>

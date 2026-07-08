@@ -8,12 +8,12 @@ import { resetPassword, setUserActive, generateTgCode } from "@/app/actions/brig
 export default function UserRowActions({
   userId,
   isActive,
-  isBrigadier,
+  canLinkTg,
   isSelf,
 }: {
   userId: string;
   isActive: boolean;
-  isBrigadier: boolean;
+  canLinkTg: boolean;
   isSelf: boolean;
 }) {
   const t = useTranslations("brigades");
@@ -39,7 +39,7 @@ export default function UserRowActions({
       >
         {t("resetPassword")}
       </button>
-      {isBrigadier && (
+      {canLinkTg && (
         <button
           className="font-medium text-neutral-500 hover:text-brand-dark disabled:opacity-50"
           disabled={pending}

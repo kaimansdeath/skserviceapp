@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireAdmin, canTouchTask } from "@/lib/authz";
+import { requireSession, requireAdmin } from "@/lib/authz";
+import { applyStatusChange } from "@/lib/taskService";
 import { findOverlaps } from "@/lib/overlap";
-import { nextStatusesFor, REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
+import { REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
 import { notifyTaskAssigned } from "@/lib/telegram";
 
@@ -147,36 +148,18 @@ export async function changeTaskStatus(params: {
   reason?: string;
 }) {
   const session = await requireSession();
-  const task = await prisma.task.findUnique({ where: { id: params.taskId } });
-  if (!task) return { error: "NOT_FOUND" as const };
-
-  if (!canTouchTask(session as any, task)) return { error: "FORBIDDEN" as const };
-
-  const allowed = nextStatusesFor(session.user.role, task.status as TaskStatusValue);
-  if (!allowed.includes(params.to)) return { error: "TRANSITION" as const };
-
-  const needsReason = REASON_STATUSES.includes(params.to);
-  if (needsReason && !params.reason?.trim()) {
-    return { error: "REASON_REQUIRED" as const };
-  }
-
-  await prisma.task.update({
-    where: { id: task.id },
-    data: {
-      status: params.to,
-      failureReason: needsReason ? params.reason!.trim() : null,
+  const res = await applyStatusChange({
+    taskId: params.taskId,
+    to: params.to,
+    reason: params.reason,
+    actor: {
+      id: session.user.id,
+      role: session.user.role,
+      brigadeId: session.user.brigadeId,
     },
+    source: "WEB",
   });
-  await prisma.taskStatusLog.create({
-    data: {
-      taskId: task.id,
-      userId: session.user.id,
-      fromStatus: task.status,
-      toStatus: params.to,
-      comment: needsReason ? params.reason!.trim() : null,
-      source: "WEB",
-    },
-  });
+  if ("error" in res) return res;
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

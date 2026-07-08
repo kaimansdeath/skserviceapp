@@ -64,6 +64,7 @@ model User {
   telegramChatId String?   @unique
   tgLinkCode     String?   @unique
   tgLinkExpires  DateTime?
+  tgPendingAction String? // JSON: очікувана відповідь у боті (причина, текст питання)
   isActive       Boolean   @default(true)
 
   createdTasks Task[]          @relation("CreatedBy")
