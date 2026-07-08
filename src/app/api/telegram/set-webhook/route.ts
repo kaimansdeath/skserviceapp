@@ -25,6 +25,19 @@ export async function GET() {
       drop_pending_updates: true,
       allowed_updates: ["message", "callback_query"],
     });
+    await bot.api.setMyCommands([
+      { command: "current", description: "Поточна задача" },
+      { command: "tasks", description: "Мої задачі" },
+      { command: "archive", description: "Архів задач" },
+    ]);
+    await bot.api.setMyCommands(
+      [
+        { command: "current", description: "Текущая задача" },
+        { command: "tasks", description: "Мои задачи" },
+        { command: "archive", description: "Архив задач" },
+      ],
+      { language_code: "ru" }
+    );
     const info = await bot.api.getWebhookInfo();
     return NextResponse.json({ ok: true, webhook: url, info });
   } catch (e: any) {

@@ -31,6 +31,14 @@ const T = {
     notLinked: "Ваш Telegram не прив'язано. Надішліть /start КОД.",
     unknown: "Не розумію. Використовуйте кнопки під повідомленнями із задачами.",
     saved: "Збережено.",
+    contactsTitle: "📞 <b>Контакти замовника:</b>",
+    noContacts: "Контактних осіб у картці клієнта немає.",
+    myTasks: "📋 <b>Мої задачі (актуальні та майбутні):</b>",
+    myArchive: "🗄 <b>Останні завершені задачі:</b>",
+    current: "▶️ <b>Поточна задача:</b>",
+    noTasks: "Актуальних задач немає.",
+    noArchive: "Завершених задач ще немає.",
+    noCurrent: "Активної задачі зараз немає.",
     fields: {
       type: "Тип",
       client: "Клієнт",
@@ -73,6 +81,14 @@ const T = {
     notLinked: "Ваш Telegram не привязан. Отправьте /start КОД.",
     unknown: "Не понимаю. Используйте кнопки под сообщениями с задачами.",
     saved: "Сохранено.",
+    contactsTitle: "📞 <b>Контакты заказчика:</b>",
+    noContacts: "Контактных лиц в карточке клиента нет.",
+    myTasks: "📋 <b>Мои задачи (актуальные и будущие):</b>",
+    myArchive: "🗄 <b>Последние завершённые задачи:</b>",
+    current: "▶️ <b>Текущая задача:</b>",
+    noTasks: "Актуальных задач нет.",
+    noArchive: "Завершённых задач ещё нет.",
+    noCurrent: "Активной задачи сейчас нет.",
     fields: {
       type: "Тип",
       client: "Клиент",
@@ -194,6 +210,35 @@ function statusKeyboard(lang: Lang, taskId: string, current: TaskStatusValue): I
     }
   }
   return kb;
+}
+
+function contactsBlock(lang: Lang, contacts: any[]): string {
+  if (!contacts || contacts.length === 0) return T[lang].noContacts;
+  return (
+    T[lang].contactsTitle +
+    "\n" +
+    contacts
+      .map((c) => {
+        const parts = [c.position, c.fullName].filter(Boolean).map(esc);
+        const phone = c.phone ? ` — <a href="tel:${esc(c.phone.replace(/\s/g, ""))}">${esc(c.phone)}</a>` : "";
+        return `• ${parts.join(", ")}${phone}`;
+      })
+      .join("\n")
+  );
+}
+
+function taskLine(lang: Lang, task: any): string {
+  return `• ${formatDateUa(task.dateFrom)}–${formatDateUa(task.dateTo)} · ${esc(task.client.name)}, ${esc(
+    task.city
+  )} · ${statusLabel(lang, task.status)}`;
+}
+
+/** Умова "задачі бригадира" (основна або друга бригада) */
+function brigadeWhere(user: any) {
+  if (user.role === "BRIGADE_LEADER" && user.brigadeId) {
+    return { OR: [{ brigadeId: user.brigadeId }, { secondBrigadeId: user.brigadeId }] };
+  }
+  return {};
 }
 
 /* ------------------------------------------------------------------ */
@@ -375,9 +420,17 @@ function registerHandlers(bot: Bot) {
       return ctx.answerCallbackQuery();
     }
     await ctx.answerCallbackQuery({ text: T[lang].saved });
-    await ctx.reply(T[lang].accepted, {
-      reply_markup: statusKeyboard(lang, taskId, "CONFIRMED"),
+    const withContacts = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: { client: { include: { contacts: true } } },
     });
+    await ctx.reply(
+      `${T[lang].accepted}\n\n${contactsBlock(lang, withContacts?.client.contacts ?? [])}`,
+      {
+        parse_mode: "HTML",
+        reply_markup: statusKeyboard(lang, taskId, "CONFIRMED"),
+      }
+    );
     await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
   });
 
@@ -432,6 +485,103 @@ function registerHandlers(bot: Bot) {
     });
     await ctx.answerCallbackQuery();
     await ctx.reply(T[lang].questionAsk);
+  });
+
+  // Меню: /tasks — актуальні та майбутні
+  bot.command("tasks", async (ctx) => {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) return ctx.reply(T.uk.notLinked);
+    const lang = langOf(user);
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...brigadeWhere(user),
+      },
+      include: { client: true },
+      orderBy: { dateFrom: "asc" },
+      take: 15,
+    });
+    if (tasks.length === 0) return ctx.reply(T[lang].noTasks);
+    await ctx.reply(`${T[lang].myTasks}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`, {
+      parse_mode: "HTML",
+    });
+  });
+
+  // Меню: /archive — завершені задачі бригадира
+  bot.command("archive", async (ctx) => {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) return ctx.reply(T.uk.notLinked);
+    const lang = langOf(user);
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: { in: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...brigadeWhere(user),
+      },
+      include: { client: true },
+      orderBy: { dateTo: "desc" },
+      take: 10,
+    });
+    if (tasks.length === 0) return ctx.reply(T[lang].noArchive);
+    await ctx.reply(
+      `${T[lang].myArchive}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`,
+      { parse_mode: "HTML" }
+    );
+  });
+
+  // Меню: /current — поточна задача (картка + кнопки статусів)
+  bot.command("current", async (ctx) => {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) return ctx.reply(T.uk.notLinked);
+    const lang = langOf(user);
+    const today = kyivToday();
+
+    // 1) активна зараз (В дорозі / На об'єкті, сьогодні в діапазоні)
+    let task = await prisma.task.findFirst({
+      where: {
+        status: { in: ["EN_ROUTE", "ON_SITE"] },
+        dateFrom: { lte: today },
+        dateTo: { gte: today },
+        ...brigadeWhere(user),
+      },
+      include: {
+        client: { include: { contacts: true } },
+        machines: true,
+        invoice: true,
+        brigade: true,
+        secondBrigade: true,
+      },
+      orderBy: { dateTo: "asc" },
+    });
+    // 2) інакше — найближча незавершена
+    if (!task) {
+      task = await prisma.task.findFirst({
+        where: {
+          status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+          dateTo: { gte: today },
+          ...brigadeWhere(user),
+        },
+        include: {
+          client: { include: { contacts: true } },
+          machines: true,
+          invoice: true,
+          brigade: true,
+          secondBrigade: true,
+        },
+        orderBy: { dateFrom: "asc" },
+      });
+    }
+    if (!task) return ctx.reply(T[lang].noCurrent);
+
+    await ctx.reply(
+      `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
+      {
+        parse_mode: "HTML",
+        reply_markup:
+          task.status === "ASSIGNED"
+            ? acceptKeyboard(lang, task.id)
+            : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
+      }
+    );
   });
 
   // Текстові повідомлення: причина або питання

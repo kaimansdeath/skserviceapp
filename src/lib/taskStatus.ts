@@ -15,21 +15,20 @@ export const FINAL_STATUSES: TaskStatusValue[] = ["DONE", "PARTIALLY_DONE", "NOT
 /** Статуси, для яких обов'язковий коментар/причина */
 export const REASON_STATUSES: TaskStatusValue[] = ["PARTIALLY_DONE", "NOT_DONE"];
 
-/** Дозволені переходи для бригадира (ланцюжок уперед + відмова з причиною) */
-const BRIGADIER_CHAIN: Record<TaskStatusValue, TaskStatusValue[]> = {
-  ASSIGNED: ["CONFIRMED"],
-  CONFIRMED: ["EN_ROUTE", "NOT_DONE"],
-  EN_ROUTE: ["ON_SITE", "NOT_DONE"],
-  ON_SITE: ["DONE", "PARTIALLY_DONE", "NOT_DONE"],
-  DONE: [],
-  PARTIALLY_DONE: [],
-  NOT_DONE: [],
-};
+/** Порядок робочого ланцюжка (без фінальних) */
+const CHAIN_ORDER: TaskStatusValue[] = ["ASSIGNED", "CONFIRMED", "EN_ROUTE", "ON_SITE"];
 
+/**
+ * Бригадир може рухати статус лише вперед по ланцюжку,
+ * але доступні одразу ВСІ подальші варіанти (включно з фінальними).
+ */
 export function nextStatusesFor(role: string, current: TaskStatusValue): TaskStatusValue[] {
   if (role === "ADMIN") return ALL_STATUSES.filter((s) => s !== current);
-  if (role === "BRIGADE_LEADER") return BRIGADIER_CHAIN[current] ?? [];
-  return [];
+  if (role !== "BRIGADE_LEADER") return [];
+  if (FINAL_STATUSES.includes(current)) return [];
+  const idx = CHAIN_ORDER.indexOf(current);
+  const forward = idx >= 0 ? CHAIN_ORDER.slice(idx + 1) : [];
+  return [...forward, "DONE", "PARTIALLY_DONE", "NOT_DONE"];
 }
 
 /** Tailwind-класи бейджа статусу */
