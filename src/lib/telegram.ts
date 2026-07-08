@@ -24,6 +24,12 @@ const T = {
     partialReasonAsk: "✍️ Напишіть, що саме не виконано, одним повідомленням:",
     questionAsk: "✍️ Напишіть ваше питання одним повідомленням — я передам керівнику:",
     questionSent: "📨 Питання передано керівнику.",
+    doneCommentAsk: "✍️ Напишіть короткий підсумок виконаних робіт одним повідомленням:",
+    answerAsk: "✍️ Напишіть відповідь одним повідомленням — я передам бригадиру:",
+    answerSent: "📨 Відповідь передано бригадиру.",
+    answerFrom: "💬 <b>Відповідь керівника</b>",
+    commentFrom: "💬 <b>Коментар до задачі</b>",
+    btnReply: "↩️ Відповісти",
     questionNoAdmin:
       "Наразі керівник не підключений до Telegram — зателефонуйте йому напряму.",
     questionFrom: "❓ <b>Питання від бригадира</b>",
@@ -74,6 +80,12 @@ const T = {
     partialReasonAsk: "✍️ Напишите, что именно не выполнено, одним сообщением:",
     questionAsk: "✍️ Напишите ваш вопрос одним сообщением — я передам руководителю:",
     questionSent: "📨 Вопрос передан руководителю.",
+    doneCommentAsk: "✍️ Напишите краткий итог выполненных работ одним сообщением:",
+    answerAsk: "✍️ Напишите ответ одним сообщением — я передам бригадиру:",
+    answerSent: "📨 Ответ передан бригадиру.",
+    answerFrom: "💬 <b>Ответ руководителя</b>",
+    commentFrom: "💬 <b>Комментарий к задаче</b>",
+    btnReply: "↩️ Ответить",
     questionNoAdmin:
       "Сейчас руководитель не подключён к Telegram — позвоните ему напрямую.",
     questionFrom: "❓ <b>Вопрос от бригадира</b>",
@@ -444,14 +456,20 @@ function registerHandlers(bot: Bot) {
     if (!user) return ctx.answerCallbackQuery({ text: T.uk.notLinked });
     const lang = langOf(user);
 
-    // статуси з причиною — запитуємо текст
-    if (to === "NOT_DONE" || to === "PARTIALLY_DONE") {
+    // фінальні статуси — запитуємо коментар/причину текстом
+    if (to === "NOT_DONE" || to === "PARTIALLY_DONE" || to === "DONE") {
       await prisma.user.update({
         where: { id: user.id },
         data: { tgPendingAction: JSON.stringify({ type: "status", status: to, taskId }) },
       });
       await ctx.answerCallbackQuery();
-      await ctx.reply(to === "NOT_DONE" ? T[lang].reasonAsk : T[lang].partialReasonAsk);
+      await ctx.reply(
+        to === "NOT_DONE"
+          ? T[lang].reasonAsk
+          : to === "PARTIALLY_DONE"
+            ? T[lang].partialReasonAsk
+            : T[lang].doneCommentAsk
+      );
       return;
     }
 
@@ -486,6 +504,22 @@ function registerHandlers(bot: Bot) {
     });
     await ctx.answerCallbackQuery();
     await ctx.reply(T[lang].questionAsk);
+  });
+
+  // ↩️ Відповісти на питання бригадира
+  bot.callbackQuery(/^ans:([^:]+):(.+)$/, async (ctx) => {
+    const chatId = String(ctx.chat!.id);
+    const taskId = ctx.match![1];
+    const toUserId = ctx.match![2];
+    const user = await userByChat(chatId);
+    if (!user) return ctx.answerCallbackQuery({ text: T.uk.notLinked });
+    const lang = langOf(user);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { tgPendingAction: JSON.stringify({ type: "answer", taskId, toUserId }) },
+    });
+    await ctx.answerCallbackQuery();
+    await ctx.reply(T[lang].answerAsk);
   });
 
   // Меню: /tasks — актуальні та майбутні
@@ -628,6 +662,12 @@ function registerHandlers(bot: Bot) {
           where: { role: "ADMIN", isActive: true, telegramChatId: { not: null } },
         }),
       ]);
+
+      // зберігаємо питання в обговоренні задачі
+      await prisma.taskComment.create({
+        data: { taskId: pending.taskId, userId: user.id, kind: "QUESTION", text },
+      });
+
       if (admins.length === 0) return ctx.reply(T[lang].questionNoAdmin);
 
       const bot2 = getBot()!;
@@ -643,11 +683,87 @@ function registerHandlers(bot: Bot) {
           .sendMessage(
             admin.telegramChatId!,
             `${T[alang].questionFrom}\n<b>${esc(user.name)}</b>${info}\n\n${esc(text)}`,
-            { parse_mode: "HTML" }
+            {
+              parse_mode: "HTML",
+              reply_markup: new InlineKeyboard().text(
+                T[alang].btnReply,
+                `ans:${pending.taskId}:${user.id}`
+              ),
+            }
           )
           .catch(() => {});
       }
       await ctx.reply(T[lang].questionSent);
+      return;
+    }
+
+    if (pending.type === "answer") {
+      const target = await prisma.user.findUnique({ where: { id: pending.toUserId } });
+
+      // зберігаємо відповідь в обговоренні задачі
+      await prisma.taskComment.create({
+        data: { taskId: pending.taskId, userId: user.id, kind: "ANSWER", text },
+      });
+
+      if (target?.telegramChatId) {
+        const tlang = langOf(target);
+        const bot2 = getBot()!;
+        await bot2.api
+          .sendMessage(
+            target.telegramChatId,
+            `${T[tlang].answerFrom} (${esc(user.name)}):\n\n${esc(text)}`,
+            { parse_mode: "HTML" }
+          )
+          .catch(() => {});
+      }
+      await ctx.reply(T[lang].answerSent);
+      return;
     }
   });
+}
+
+/** Сповіщення про новий коментар з веб-інтерфейсу: адмін ↔ бригадири задачі */
+export async function notifyTaskComment(taskId: string, authorId: string, text: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const [task, author] = await Promise.all([
+    prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        client: true,
+        brigade: { include: { users: { where: { role: "BRIGADE_LEADER", isActive: true } } } },
+        secondBrigade: {
+          include: { users: { where: { role: "BRIGADE_LEADER", isActive: true } } },
+        },
+      },
+    }),
+    prisma.user.findUnique({ where: { id: authorId } }),
+  ]);
+  if (!task || !author) return;
+
+  let recipients: any[];
+  if (author.role === "BRIGADE_LEADER") {
+    recipients = await prisma.user.findMany({
+      where: { role: "ADMIN", isActive: true, telegramChatId: { not: null } },
+    });
+  } else {
+    recipients = [
+      ...(task.brigade?.users ?? []),
+      ...(task.secondBrigade?.users ?? []),
+    ].filter((u: any) => u.telegramChatId && u.id !== author.id);
+  }
+
+  for (const r of recipients) {
+    const lang = langOf(r);
+    const f = T[lang].fields;
+    await bot.api
+      .sendMessage(
+        r.telegramChatId!,
+        `${T[lang].commentFrom}\n<b>${esc(author.name)}</b>\n<b>${f.task}:</b> ${esc(
+          task.client.name
+        )}, ${esc(task.city)}\n\n${esc(text)}`,
+        { parse_mode: "HTML" }
+      )
+      .catch(() => {});
+  }
 }

@@ -46,6 +46,12 @@ enum ExecutorType {
   OUTSOURCE // виконує зовнішній підрядник
 }
 
+enum CommentKind {
+  QUESTION // питання бригадира
+  ANSWER // відповідь керівника
+  COMMENT // коментар із веб-інтерфейсу
+}
+
 enum LogSource {
   WEB
   TELEGRAM
@@ -69,6 +75,7 @@ model User {
 
   createdTasks Task[]          @relation("CreatedBy")
   statusLogs   TaskStatusLog[]
+  taskComments TaskComment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -200,6 +207,7 @@ model Task {
   createdBy     User       @relation("CreatedBy", fields: [createdById], references: [id])
 
   statusLogs TaskStatusLog[]
+  comments   TaskComment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -208,6 +216,20 @@ model Task {
   @@index([status])
   @@index([invoiceId])
   @@index([secondBrigadeId])
+}
+
+// Обговорення задачі (питання бригадира ↔ відповіді керівника, коментарі)
+model TaskComment {
+  id        String      @id @default(cuid())
+  taskId    String
+  task      Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id])
+  kind      CommentKind
+  text      String
+  createdAt DateTime    @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 model TaskStatusLog {

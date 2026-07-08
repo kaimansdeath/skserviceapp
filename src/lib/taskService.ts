@@ -28,11 +28,12 @@ export async function applyStatusChange(params: {
   const needsReason = REASON_STATUSES.includes(params.to);
   if (needsReason && !params.reason?.trim()) return { error: "REASON_REQUIRED" as const };
 
+  const comment = params.reason?.trim() || null; // для DONE — необов'язковий підсумок робіт
   const updated = await prisma.task.update({
     where: { id: task.id },
     data: {
       status: params.to,
-      failureReason: needsReason ? params.reason!.trim() : null,
+      failureReason: needsReason ? comment : null,
     },
   });
   await prisma.taskStatusLog.create({
@@ -41,7 +42,7 @@ export async function applyStatusChange(params: {
       userId: params.actor.id,
       fromStatus: task.status,
       toStatus: params.to,
-      comment: needsReason ? params.reason!.trim() : null,
+      comment,
       source: params.source,
     },
   });

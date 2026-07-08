@@ -7,6 +7,7 @@ import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
 import StatusChanger from "@/components/tasks/StatusChanger";
 import DeleteTaskButton from "@/components/tasks/DeleteTaskButton";
+import TaskDiscussion from "@/components/tasks/TaskDiscussion";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function TaskDetailPage({
       machines: { include: { type: true } },
       createdBy: true,
       statusLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
+      comments: { include: { user: true }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!task) notFound();
@@ -130,6 +132,17 @@ export default async function TaskDetailPage({
           <StatusChanger taskId={task.id} current={task.status as any} role={session.user.role} />
         </div>
       )}
+
+      <TaskDiscussion
+        taskId={task.id}
+        comments={(task.comments as any[]).map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          text: c.text,
+          userName: c.user?.name ?? null,
+          createdAt: new Date(c.createdAt).toLocaleString("uk-UA", { timeZone: "Europe/Kyiv" }),
+        }))}
+      />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-neutral-700">{t("tasks.statusLog")}</h2>

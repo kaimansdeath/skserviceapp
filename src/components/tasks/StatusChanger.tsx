@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { changeTaskStatus } from "@/app/actions/tasks";
-import { nextStatusesFor, REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
+import { nextStatusesFor, REASON_STATUSES, FINAL_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { btnSecondary, inputCls, btnPrimary } from "@/components/ui/Field";
 
 export default function StatusChanger({
@@ -47,13 +47,15 @@ export default function StatusChanger({
       <p className="text-sm font-semibold text-neutral-700">{t("changeStatus")}</p>
       <div className="flex flex-wrap gap-2">
         {options.map((s) =>
-          REASON_STATUSES.includes(s) ? (
+          FINAL_STATUSES.includes(s) ? (
             <button
               key={s}
               className={
                 s === "NOT_DONE"
                   ? "rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-                  : "rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50"
+                  : s === "PARTIALLY_DONE"
+                    ? "rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-50"
+                    : "rounded-lg border border-brand bg-white px-4 py-2 text-sm font-medium text-brand-dark transition hover:bg-brand/5"
               }
               disabled={pending}
               onClick={() => setAskReason(s)}
@@ -75,7 +77,11 @@ export default function StatusChanger({
       {askReason && (
         <div className="max-w-md space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
           <p className="text-sm font-medium text-neutral-700">
-            {askReason === "NOT_DONE" ? t("notDoneReasonPrompt") : t("partialReasonPrompt")}
+            {askReason === "NOT_DONE"
+              ? t("notDoneReasonPrompt")
+              : askReason === "PARTIALLY_DONE"
+                ? t("partialReasonPrompt")
+                : t("doneCommentPrompt")}
           </p>
           <textarea
             className={inputCls}
@@ -86,7 +92,7 @@ export default function StatusChanger({
           <div className="flex gap-2">
             <button
               className={btnPrimary}
-              disabled={pending || !reason.trim()}
+              disabled={pending || (REASON_STATUSES.includes(askReason) && !reason.trim())}
               onClick={() => apply(askReason, reason)}
             >
               {tc("save")}

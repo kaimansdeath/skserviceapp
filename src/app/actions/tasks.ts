@@ -8,7 +8,8 @@ import { applyStatusChange } from "@/lib/taskService";
 import { findOverlaps } from "@/lib/overlap";
 import { REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
-import { notifyTaskAssigned } from "@/lib/telegram";
+import { notifyTaskAssigned, notifyTaskComment } from "@/lib/telegram";
+import { canTouchTask } from "@/lib/authz";
 
 const taskInput = z
   .object({
@@ -195,6 +196,33 @@ export async function deleteTask(taskId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return { error: "NOT_FOUND" as const };
   await prisma.task.delete({ where: { id: taskId } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Коментар до задачі з веб-інтерфейсу (зберігається в обговоренні + сповіщення в TG) */
+export async function addTaskComment(taskId: string, text: string) {
+  const session = await requireSession();
+  const trimmed = text.trim();
+  if (!trimmed) return { error: "EMPTY" as const };
+
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) return { error: "NOT_FOUND" as const };
+
+  // бригадир — лише свої задачі; адмін/директор/бухгалтер — будь-які
+  if (session.user.role === "BRIGADE_LEADER" && !canTouchTask(session as any, task)) {
+    return { error: "FORBIDDEN" as const };
+  }
+
+  await prisma.taskComment.create({
+    data: {
+      taskId,
+      userId: session.user.id,
+      kind: session.user.role === "BRIGADE_LEADER" ? "QUESTION" : "COMMENT",
+      text: trimmed,
+    },
+  });
+  notifyTaskComment(taskId, session.user.id, trimmed).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const };
 }
