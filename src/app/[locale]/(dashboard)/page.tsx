@@ -1,11 +1,443 @@
-import { getTranslations } from "next-intl/server";
+import { getTranslations, getLocale } from "next-intl/server";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import {
+  kyivToday,
+  formatDateUa,
+  dateFieldFromYmd,
+  toYmd,
+  isOverdue,
+} from "@/lib/dates";
+import { resolveCities, geoKey, KYIV_BASE } from "@/lib/geocode";
+import { ALL_STATUSES } from "@/lib/taskStatus";
+import { Link } from "@/i18n/routing";
+import StatusBadge from "@/components/ui/StatusBadge";
+import DashboardMap from "@/components/map/DashboardMap";
+import type { MapMarker, MapLine } from "@/components/map/UkraineMap";
+import MapControls from "@/components/dashboard/MapControls";
+import KanbanControls from "@/components/dashboard/KanbanControls";
 
-// Етап 4 замінить цю сторінку на карту + зведення дня
-export default async function DashboardPage() {
+export const dynamic = "force-dynamic";
+
+const BRIGADE_PALETTE = ["#009C4B", "#F36E33", "#2563EB", "#9333EA", "#0891B2", "#DC2626", "#CA8A04"];
+
+function daysInclusive(from: Date, to: Date): number {
+  return Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: {
+    mfrom?: string;
+    mto?: string;
+    mbrig?: string;
+    kmonth?: string;
+    kbrig?: string;
+  };
+}) {
   const t = await getTranslations();
+  const locale = await getLocale();
+  const session = (await auth())!;
+  const isBrigadier = session.user.role === "BRIGADE_LEADER";
+  const today = kyivToday();
+
+  const brigades = await prisma.brigade.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+  });
+  const brigadeColor = new Map<string, string>(
+    brigades.map((b: any, i: number) => [b.id, BRIGADE_PALETTE[i % BRIGADE_PALETTE.length]])
+  );
+
+  /* ---------------- Карта ---------------- */
+  const periodMode = !!(searchParams.mfrom && searchParams.mto);
+  const markers: MapMarker[] = [];
+  const polylines: MapLine[] = [];
+
+  if (periodMode) {
+    // Режим періоду: всі точки, де була бригада за вибраний строк
+    const tasks = await prisma.task.findMany({
+      where: {
+        executorType: "BRIGADE",
+        dateFrom: { lte: dateFieldFromYmd(searchParams.mto!) },
+        dateTo: { gte: dateFieldFromYmd(searchParams.mfrom!) },
+        ...(searchParams.mbrig
+          ? { OR: [{ brigadeId: searchParams.mbrig }, { secondBrigadeId: searchParams.mbrig }] }
+          : {}),
+      },
+      include: { brigade: true, secondBrigade: true, client: true },
+      orderBy: { dateFrom: "asc" },
+      take: 300,
+    });
+
+    const geo = await resolveCities(tasks.map((x: any) => ({ city: x.city, oblast: x.oblast })));
+
+    const byBrigade = new Map<string, { name: string; points: [number, number][] }>();
+    for (const task of tasks as any[]) {
+      const pos = geo.get(geoKey(task.city, task.oblast));
+      if (!pos) continue;
+      const bIds = [task.brigadeId, task.secondBrigadeId].filter(Boolean) as string[];
+      for (const bid of bIds) {
+        const color = brigadeColor.get(bid) ?? "#6B7280";
+        const bName =
+          bid === task.brigadeId ? task.brigade?.name : task.secondBrigade?.name;
+        markers.push({
+          lat: pos.lat,
+          lng: pos.lng,
+          color,
+          radius: 8,
+          title: `${task.city}`,
+          lines: [
+            bName ?? "",
+            task.client.name,
+            `${formatDateUa(task.dateFrom)} — ${formatDateUa(task.dateTo)}`,
+          ],
+        });
+        if (!byBrigade.has(bid)) byBrigade.set(bid, { name: bName ?? "", points: [] });
+        byBrigade.get(bid)!.points.push([pos.lat, pos.lng]);
+      }
+    }
+    // маршрут-пунктир, коли обрано одну бригаду
+    if (searchParams.mbrig) {
+      const entry = byBrigade.get(searchParams.mbrig);
+      if (entry && entry.points.length > 1) {
+        polylines.push({ color: brigadeColor.get(searchParams.mbrig) ?? "#6B7280", points: entry.points });
+      }
+    }
+  } else {
+    // Живий режим: маркер кожної бригади (активна задача або база в Києві)
+    const activeTasks = await prisma.task.findMany({
+      where: {
+        executorType: "BRIGADE",
+        status: { in: ["EN_ROUTE", "ON_SITE"] },
+        dateFrom: { lte: today },
+        dateTo: { gte: today },
+      },
+      include: { brigade: true, secondBrigade: true, client: true },
+      orderBy: { dateTo: "asc" },
+    });
+    const overdueByBrigade = await prisma.task.groupBy({
+      by: ["brigadeId"],
+      where: {
+        executorType: "BRIGADE",
+        dateTo: { lt: today },
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        brigadeId: { not: null },
+      },
+      _count: { _all: true },
+    });
+    const overdueSet = new Set(
+      (overdueByBrigade as any[]).map((g) => g.brigadeId as string)
+    );
+
+    const geo = await resolveCities(
+      activeTasks.map((x: any) => ({ city: x.city, oblast: x.oblast }))
+    );
+
+    const brigadeActive = new Map<string, any>();
+    for (const task of activeTasks as any[]) {
+      for (const bid of [task.brigadeId, task.secondBrigadeId].filter(Boolean) as string[]) {
+        if (!brigadeActive.has(bid)) brigadeActive.set(bid, task);
+      }
+    }
+
+    for (const b of brigades as any[]) {
+      const task = brigadeActive.get(b.id);
+      const hasOverdue = overdueSet.has(b.id);
+      if (task) {
+        const pos = geo.get(geoKey(task.city, task.oblast)) ?? KYIV_BASE;
+        markers.push({
+          lat: pos.lat,
+          lng: pos.lng,
+          color: hasOverdue ? "#DC2626" : task.status === "ON_SITE" ? "#009C4B" : "#F36E33",
+          radius: 11,
+          title: b.name,
+          lines: [
+            `${t(`status.${task.status}` as any)}`,
+            task.client.name,
+            `${task.city} · ${formatDateUa(task.dateFrom)} — ${formatDateUa(task.dateTo)}`,
+          ],
+        });
+      } else {
+        markers.push({
+          lat: KYIV_BASE.lat + (Math.random() - 0.5) * 0.02,
+          lng: KYIV_BASE.lng + (Math.random() - 0.5) * 0.02,
+          color: hasOverdue ? "#DC2626" : "#9CA3AF",
+          radius: 10,
+          title: b.name,
+          lines: [t("dashboard.map.atBase")],
+        });
+      }
+    }
+  }
+
+  /* ---------------- Зведення дня ---------------- */
+  const brigadeScope = isBrigadier
+    ? { OR: [{ brigadeId: session.user.brigadeId }, { secondBrigadeId: session.user.brigadeId }] }
+    : {};
+  const [todayTasks, overdueTasks, upcoming] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        dateFrom: { lte: today },
+        dateTo: { gte: today },
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...brigadeScope,
+      },
+      include: { brigade: true, secondBrigade: true, client: true },
+      orderBy: { dateTo: "asc" },
+      take: 20,
+    }),
+    prisma.task.findMany({
+      where: {
+        dateTo: { lt: today },
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...brigadeScope,
+      },
+      include: { brigade: true, secondBrigade: true, client: true },
+      orderBy: { dateTo: "asc" },
+      take: 20,
+    }),
+    prisma.task.findMany({
+      where: {
+        dateFrom: { gt: today },
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...brigadeScope,
+      },
+      include: { brigade: true, secondBrigade: true, client: true },
+      orderBy: { dateFrom: "asc" },
+      take: 10,
+    }),
+  ]);
+
+  const executorName = (task: any) =>
+    task.executorType === "OUTSOURCE"
+      ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
+      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
+
+  const summaryCard = (
+    title: string,
+    tasks: any[],
+    accent: "red" | "green" | "neutral"
+  ) => (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4">
+      <h3
+        className={
+          "mb-2 text-sm font-semibold " +
+          (accent === "red"
+            ? "text-red-600"
+            : accent === "green"
+              ? "text-brand-dark"
+              : "text-neutral-700")
+        }
+      >
+        {title} <span className="text-neutral-400">({tasks.length})</span>
+      </h3>
+      {tasks.length === 0 ? (
+        <p className="text-sm text-neutral-400">{t("dashboard.noTasks")}</p>
+      ) : (
+        <ul className="space-y-1.5 text-sm">
+          {tasks.map((task: any) => (
+            <li key={task.id} className={accent === "red" ? "rounded bg-red-50 px-2 py-1" : ""}>
+              <Link href={`/tasks/${task.id}`} className="font-medium text-brand-dark hover:underline">
+                {formatDateUa(task.dateFrom)}–{formatDateUa(task.dateTo)}
+              </Link>{" "}
+              · {executorName(task)} · {task.client.name}, {task.city}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  /* ---------------- Канбан ---------------- */
+  const kmonth = searchParams.kmonth ?? toYmd(today).slice(0, 7);
+  const [ky, km] = kmonth.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(ky, km - 1, 1));
+  const monthEnd = new Date(Date.UTC(ky, km, 0));
+  const kanbanTasks = await prisma.task.findMany({
+    where: {
+      dateFrom: { lte: monthEnd },
+      dateTo: { gte: monthStart },
+      ...(searchParams.kbrig
+        ? { OR: [{ brigadeId: searchParams.kbrig }, { secondBrigadeId: searchParams.kbrig }] }
+        : isBrigadier
+          ? brigadeScope
+          : {}),
+    },
+    include: { brigade: true, secondBrigade: true, client: true },
+    orderBy: { dateFrom: "asc" },
+    take: 200,
+  });
+  const byStatus = new Map<string, any[]>(ALL_STATUSES.map((s) => [s, []]));
+  for (const task of kanbanTasks as any[]) byStatus.get(task.status)?.push(task);
+
+  /* ---------------- Аналітика (MTTR, тривалість) ---------------- */
+  const yearAgo = new Date(today);
+  yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
+  const doneTasks = await prisma.task.findMany({
+    where: { status: "DONE", dateTo: { gte: yearAgo } },
+    include: { machines: { include: { type: true } } },
+  });
+
+  const durations = (list: any[]) => list.map((x) => daysInclusive(x.dateFrom, x.dateTo));
+  const avg = (nums: number[]) =>
+    nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : null;
+
+  const mttr = avg(durations((doneTasks as any[]).filter((x) => x.taskType === "REPAIR")));
+  const avgAll = avg(durations(doneTasks as any[]));
+
+  // ПНР за групами обладнання (токарні, фрезерні тощо)
+  const pnrByType = new Map<string, number[]>();
+  for (const task of (doneTasks as any[]).filter((x) => x.taskType === "PNR")) {
+    const d = daysInclusive(task.dateFrom, task.dateTo);
+    for (const m of task.machines) {
+      const name = locale === "ru" ? m.type.nameRu : m.type.nameUk;
+      if (!pnrByType.has(name)) pnrByType.set(name, []);
+      pnrByType.get(name)!.push(d);
+    }
+  }
+  const pnrRows = [...pnrByType.entries()]
+    .map(([name, ds]) => ({ name, avg: avg(ds)!, count: ds.length }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  const typeRows = ["ENGINEERING", "PNR", "REPAIR", "DEFECTATION", "VISIT", "OTHER"]
+    .map((tt) => {
+      const ds = durations((doneTasks as any[]).filter((x) => x.taskType === tt));
+      return { type: tt, avg: avg(ds), count: ds.length };
+    })
+    .filter((r) => r.count > 0);
+
+  /* ---------------- Рендер ---------------- */
   return (
-    <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-10 text-center text-sm text-neutral-500">
-      {t("common.underConstruction")}
+    <div className="space-y-8">
+      {/* Карта */}
+      <section>
+        <MapControls brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))} />
+        <div className="overflow-hidden rounded-xl border border-neutral-200">
+          <DashboardMap markers={markers} polylines={polylines} />
+        </div>
+        {!periodMode && (
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-neutral-500">
+            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#009C4B] align-middle"></span>{t("status.ON_SITE")}</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#F36E33] align-middle"></span>{t("status.EN_ROUTE")}</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#DC2626] align-middle"></span>{t("dashboard.map.hasOverdue")}</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded-full bg-[#9CA3AF] align-middle"></span>{t("dashboard.map.atBase")}</span>
+          </div>
+        )}
+      </section>
+
+      {/* Зведення дня */}
+      <section className="grid gap-4 lg:grid-cols-3">
+        {summaryCard(t("dashboard.todayTasks"), todayTasks, "green")}
+        {summaryCard(t("dashboard.overdue"), overdueTasks, "red")}
+        {summaryCard(t("dashboard.upcoming"), upcoming, "neutral")}
+      </section>
+
+      {/* Канбан */}
+      <section>
+        <h2 className="mb-2 text-base font-bold">{t("dashboard.kanban.title")}</h2>
+        <KanbanControls
+          brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+          defaultMonth={kmonth}
+        />
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {ALL_STATUSES.map((status) => {
+            const list = byStatus.get(status) ?? [];
+            return (
+              <div key={status} className="w-60 shrink-0 rounded-xl bg-neutral-100 p-2">
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <StatusBadge status={status} />
+                  <span className="text-xs font-bold text-neutral-400">{list.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {list.map((task: any) => {
+                    const overdue = isOverdue(task.dateTo, task.status);
+                    return (
+                      <Link
+                        key={task.id}
+                        href={`/tasks/${task.id}`}
+                        className={
+                          "block rounded-lg border bg-white p-2.5 text-xs shadow-sm transition hover:shadow " +
+                          (overdue ? "border-red-300" : "border-neutral-200")
+                        }
+                      >
+                        <p className="font-semibold text-neutral-800">{task.client.name}</p>
+                        <p className="text-neutral-500">{task.city}</p>
+                        <p className={"mt-1 " + (overdue ? "font-semibold text-red-600" : "text-neutral-400")}>
+                          {formatDateUa(task.dateFrom)}–{formatDateUa(task.dateTo)}
+                        </p>
+                        <p className="mt-0.5 text-neutral-500">{executorName(task)}</p>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Аналітика */}
+      <section>
+        <h2 className="mb-2 text-base font-bold">{t("dashboard.analytics.title")}</h2>
+        <p className="mb-3 text-xs text-neutral-400">{t("dashboard.analytics.hint")}</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-neutral-400">MTTR</p>
+            <p className="mt-1 text-3xl font-bold text-brand-dark">
+              {mttr !== null ? mttr : "—"}
+              {mttr !== null && <span className="ml-1 text-sm font-medium text-neutral-400">{t("dashboard.analytics.days")}</span>}
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">{t("dashboard.analytics.mttrHint")}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-neutral-400">{t("dashboard.analytics.avgAll")}</p>
+            <p className="mt-1 text-3xl font-bold text-brand-dark">
+              {avgAll !== null ? avgAll : "—"}
+              {avgAll !== null && <span className="ml-1 text-sm font-medium text-neutral-400">{t("dashboard.analytics.days")}</span>}
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">{t("dashboard.analytics.avgAllHint", { count: doneTasks.length })}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 md:col-span-2">
+            <p className="mb-2 text-xs uppercase tracking-wide text-neutral-400">{t("dashboard.analytics.pnrByGroup")}</p>
+            {pnrRows.length === 0 ? (
+              <p className="text-sm text-neutral-400">{t("dashboard.noTasks")}</p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody>
+                  {pnrRows.map((r) => (
+                    <tr key={r.name} className="border-b border-neutral-50 last:border-0">
+                      <td className="py-1 pr-2">{r.name}</td>
+                      <td className="py-1 text-right font-semibold text-brand-dark">
+                        {r.avg} {t("dashboard.analytics.days")}
+                      </td>
+                      <td className="w-16 py-1 text-right text-xs text-neutral-400">n={r.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+        {typeRows.length > 0 && (
+          <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-4">
+            <p className="mb-2 text-xs uppercase tracking-wide text-neutral-400">{t("dashboard.analytics.byTaskType")}</p>
+            <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+              {typeRows.map((r) => (
+                <div key={r.type}>
+                  <span className="text-neutral-500">{t(`taskType.${r.type}` as any)}:</span>{" "}
+                  <span className="font-semibold text-brand-dark">
+                    {r.avg} {t("dashboard.analytics.days")}
+                  </span>{" "}
+                  <span className="text-xs text-neutral-400">n={r.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

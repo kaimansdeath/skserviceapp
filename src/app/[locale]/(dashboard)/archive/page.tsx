@@ -3,7 +3,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatDateUa, dateFieldFromYmd, archiveCutoff } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
-import StatusBadge from "@/components/ui/StatusBadge";
 import ArchiveFilters from "@/components/archive/ArchiveFilters";
 
 export const dynamic = "force-dynamic";
@@ -123,7 +122,12 @@ export default async function ArchivePage({
                 <td className="whitespace-nowrap px-3 py-2">{task.invoice?.number ?? "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{task.orderNumber ?? "—"}</td>
                 <td className="px-3 py-2">
-                  <StatusBadge status={task.status} />
+                  <span
+                    title={t(`status.${task.status}` as any)}
+                    className="text-lg leading-none"
+                  >
+                    {task.status === "DONE" ? "✅" : task.status === "PARTIALLY_DONE" ? "🟡" : "❌"}
+                  </span>
                   {task.failureReason && (
                     <p className="mt-1 max-w-[220px] text-xs text-neutral-500">{task.failureReason}</p>
                   )}
