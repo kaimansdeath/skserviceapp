@@ -2,7 +2,6 @@
 
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { FINAL_STATUSES } from "@/lib/taskStatus";
 import { inputCls, btnSecondary } from "@/components/ui/Field";
 
 export default function ArchiveFilters({
@@ -14,7 +13,6 @@ export default function ArchiveFilters({
 }) {
   const t = useTranslations("archive");
   const tf = useTranslations("tasks.filters");
-  const ts = useTranslations("status");
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -56,19 +54,6 @@ export default function ArchiveFilters({
           <option value="">{tf("all")}</option>
           {brigades.map((b) => (
             <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-xs text-neutral-500">{tf("status")}</span>
-        <select
-          className={inputCls + " w-48"}
-          value={sp.get("status") ?? ""}
-          onChange={(e) => setParam("status", e.target.value)}
-        >
-          <option value="">{tf("all")}</option>
-          {FINAL_STATUSES.map((s) => (
-            <option key={s} value={s}>{ts(s as any)}</option>
           ))}
         </select>
       </label>

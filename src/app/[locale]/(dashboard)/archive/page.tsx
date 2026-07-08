@@ -2,7 +2,6 @@ import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatDateUa, dateFieldFromYmd, archiveCutoff } from "@/lib/dates";
-import { FINAL_STATUSES } from "@/lib/taskStatus";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ArchiveFilters from "@/components/archive/ArchiveFilters";
@@ -16,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function ArchivePage({
   searchParams,
 }: {
-  searchParams: { q?: string; brigade?: string; status?: string; from?: string; to?: string };
+  searchParams: { q?: string; brigade?: string; from?: string; to?: string };
 }) {
   const t = await getTranslations();
   const session = (await auth())!;
@@ -28,9 +27,7 @@ export default async function ArchivePage({
     prisma.brigade.findMany({ orderBy: { name: "asc" } }),
     prisma.task.findMany({
       where: {
-        status: searchParams.status
-          ? (searchParams.status as any)
-          : { in: FINAL_STATUSES as any },
+        status: "DONE",
         dateTo: {
           lt: archiveCutoff(),
           ...(searchParams.to ? { lte: dateFieldFromYmd(searchParams.to) } : {}),

@@ -220,7 +220,8 @@ function contactsBlock(lang: Lang, contacts: any[]): string {
     contacts
       .map((c) => {
         const parts = [c.position, c.fullName].filter(Boolean).map(esc);
-        const phone = c.phone ? ` — <a href="tel:${esc(c.phone.replace(/\s/g, ""))}">${esc(c.phone)}</a>` : "";
+        // телефон plain-текстом у міжнародному форматі — Telegram сам робить його клікабельним
+        const phone = c.phone ? ` — ${esc(c.phone)}` : "";
         return `• ${parts.join(", ")}${phone}`;
       })
       .join("\n")
@@ -535,53 +536,53 @@ function registerHandlers(bot: Bot) {
     const lang = langOf(user);
     const today = kyivToday();
 
-    // 1) активна зараз (В дорозі / На об'єкті, сьогодні в діапазоні)
-    let task = await prisma.task.findFirst({
+    const includeFull = {
+      client: { include: { contacts: true } },
+      machines: true,
+      invoice: true,
+      brigade: true,
+      secondBrigade: true,
+    } as const;
+
+    // 1) усі активні зараз (В дорозі / На об'єкті, сьогодні в діапазоні) — може бути кілька
+    let tasks = await prisma.task.findMany({
       where: {
         status: { in: ["EN_ROUTE", "ON_SITE"] },
         dateFrom: { lte: today },
         dateTo: { gte: today },
         ...brigadeWhere(user),
       },
-      include: {
-        client: { include: { contacts: true } },
-        machines: true,
-        invoice: true,
-        brigade: true,
-        secondBrigade: true,
-      },
+      include: includeFull,
       orderBy: { dateTo: "asc" },
+      take: 3,
     });
     // 2) інакше — найближча незавершена
-    if (!task) {
-      task = await prisma.task.findFirst({
+    if (tasks.length === 0) {
+      const next = await prisma.task.findFirst({
         where: {
           status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
           dateTo: { gte: today },
           ...brigadeWhere(user),
         },
-        include: {
-          client: { include: { contacts: true } },
-          machines: true,
-          invoice: true,
-          brigade: true,
-          secondBrigade: true,
-        },
+        include: includeFull,
         orderBy: { dateFrom: "asc" },
       });
+      if (next) tasks = [next];
     }
-    if (!task) return ctx.reply(T[lang].noCurrent);
+    if (tasks.length === 0) return ctx.reply(T[lang].noCurrent);
 
-    await ctx.reply(
-      `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
-      {
-        parse_mode: "HTML",
-        reply_markup:
-          task.status === "ASSIGNED"
-            ? acceptKeyboard(lang, task.id)
-            : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
-      }
-    );
+    for (const task of tasks) {
+      await ctx.reply(
+        `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
+        {
+          parse_mode: "HTML",
+          reply_markup:
+            task.status === "ASSIGNED"
+              ? acceptKeyboard(lang, task.id)
+              : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
+        }
+      );
+    }
   });
 
   // Текстові повідомлення: причина або питання

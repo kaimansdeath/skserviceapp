@@ -3,7 +3,6 @@ import ExcelJS from "exceljs";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { dateFieldFromYmd, archiveCutoff, formatDateUa } from "@/lib/dates";
-import { FINAL_STATUSES } from "@/lib/taskStatus";
 import uk from "@/messages/uk.json";
 import ru from "@/messages/ru.json";
 
@@ -21,13 +20,12 @@ export async function GET(req: NextRequest) {
   const msgs: any = locale === "ru" ? ru : uk;
   const q = sp.get("q")?.trim();
   const brigade = sp.get("brigade") || undefined;
-  const status = sp.get("status") || undefined;
   const from = sp.get("from") || undefined;
   const to = sp.get("to") || undefined;
 
   const tasks = await prisma.task.findMany({
     where: {
-      status: status ? (status as any) : { in: FINAL_STATUSES as any },
+      status: "DONE",
       dateTo: { lt: archiveCutoff(), ...(to ? { lte: dateFieldFromYmd(to) } : {}) },
       ...(from ? { dateFrom: { gte: dateFieldFromYmd(from) } } : {}),
       ...(brigade ? { OR: [{ brigadeId: brigade }, { secondBrigadeId: brigade }] } : {}),
