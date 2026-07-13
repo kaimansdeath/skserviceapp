@@ -4,16 +4,19 @@ import { useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Link } from "@/i18n/routing";
-import { setToolStatus, moveTool, deleteTool } from "@/app/actions/tools";
+import { setToolStatus, deleteTool } from "@/app/actions/tools";
+import DistributeTool from "./DistributeTool";
 
 export type ToolItem = {
   id: string;
   name: string;
+  manufacturer: string | null;
   inventoryNumber: string | null;
   toolClass: string;
   status: string;
-  holderLabel: string;
-  holderKey: string; // "w" | "b:<id>" | "p:<id>"
+  quantity: number;
+  allocations: Record<string, number>; // "w" | "b:<id>" | "p:<id>" -> qty
+  holderSummary: string;
 };
 
 const STATUS_CLS: Record<string, string> = {
@@ -40,17 +43,23 @@ export default function ToolRow({
   const [pending, startTransition] = useTransition();
 
   return (
-    <tr className="border-b border-neutral-100 last:border-0">
+    <tr className="border-b border-neutral-100 align-top last:border-0">
       <td className="px-3 py-2">
         <Link href={`/tools/${tool.id}`} className="font-medium text-brand-dark hover:underline">
           {tool.name}
         </Link>
+        {tool.manufacturer && (
+          <span className="block text-xs text-neutral-400">{tool.manufacturer}</span>
+        )}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-neutral-500">
         {tool.inventoryNumber ?? "—"}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-neutral-600">
         {t(`class.${tool.toolClass}` as any)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-center font-semibold text-neutral-700">
+        {tool.quantity}
       </td>
       <td className="whitespace-nowrap px-3 py-2">
         {canManage ? (
@@ -85,40 +94,18 @@ export default function ToolRow({
           </span>
         )}
       </td>
-      <td className="whitespace-nowrap px-3 py-2">
-        {canManage ? (
-          <select
-            className="w-44 rounded-lg border border-neutral-300 bg-white px-2 py-1 text-sm outline-none focus:border-brand disabled:opacity-50"
-            value={tool.holderKey}
-            disabled={pending}
-            onChange={(e) => {
-              const v = e.target.value;
-              const target =
-                v === "w"
-                  ? ({ type: "WAREHOUSE" } as const)
-                  : v.startsWith("b:")
-                    ? ({ type: "BRIGADE", id: v.slice(2) } as const)
-                    : ({ type: "PERSON", id: v.slice(2) } as const);
-              startTransition(async () => {
-                await moveTool(tool.id, target);
-                router.refresh();
-              });
-            }}
-          >
-            <option value="w">🏭 {t("warehouse")}</option>
-            <optgroup label={t("tabs.brigades")}>
-              {brigades.map((b) => (
-                <option key={b.id} value={`b:${b.id}`}>{b.name}</option>
-              ))}
-            </optgroup>
-            <optgroup label={t("tabs.people")}>
-              {people.map((p) => (
-                <option key={p.id} value={`p:${p.id}`}>{p.name}</option>
-              ))}
-            </optgroup>
-          </select>
-        ) : (
-          <span className="text-neutral-700">{tool.holderLabel}</span>
+      <td className="px-3 py-2">
+        <span className="text-neutral-700">{tool.holderSummary}</span>
+        {canManage && (
+          <div>
+            <DistributeTool
+              toolId={tool.id}
+              totalQuantity={tool.quantity}
+              current={tool.allocations}
+              brigades={brigades}
+              people={people}
+            />
+          </div>
         )}
       </td>
       <td className="px-3 py-2 text-right">

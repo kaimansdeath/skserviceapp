@@ -4,16 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { Link } from "@/i18n/routing";
 import ToolRow, { type ToolItem } from "@/components/tools/ToolRow";
 import AddToolForm from "@/components/tools/AddToolForm";
-import ToolRequestActions from "@/components/tools/ToolRequestActions";
 import AddToolRequestForm from "@/components/tools/AddToolRequestForm";
 import ToolsExcelButtons from "@/components/tools/ToolsExcelButtons";
+import ToolRequestActions from "@/components/tools/ToolRequestActions";
 
 export const dynamic = "force-dynamic";
 
 const TABS = ["brigades", "people", "warehouse", "tooling", "purchase"] as const;
 type Tab = (typeof TABS)[number];
 
-/** Інструмент: облік, склад, видача, заявки на закупку */
+/** Інструмент: облік за кількістю, розподіл по місцях, склад, заявки */
 export default async function ToolsPage({
   searchParams,
 }: {
@@ -32,7 +32,9 @@ export default async function ToolsPage({
 
   const [tools, brigades, people, issueRequests, purchaseRequests] = await Promise.all([
     prisma.tool.findMany({
-      include: { holderBrigade: true, holderUser: true },
+      include: {
+        allocations: { include: { brigade: true, user: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -54,43 +56,70 @@ export default async function ToolsPage({
     }),
   ]);
 
-  // польовий персонал бачить лише свою бригаду / себе
-  const visibleTools = (tools as any[]).filter((x) => {
+  function toItem(x: any): ToolItem {
+    const allocations: Record<string, number> = {};
+    const labels: string[] = [];
+    for (const a of x.allocations) {
+      const key =
+        a.holderKind === "WAREHOUSE" ? "w" : a.holderKind === "BRIGADE" ? `b:${a.brigadeId}` : `p:${a.userId}`;
+      allocations[key] = a.quantity;
+      if (a.quantity > 0) {
+        const label =
+          a.holderKind === "WAREHOUSE"
+            ? t("tools.warehouse")
+            : a.holderKind === "BRIGADE"
+              ? a.brigade?.name ?? "?"
+              : a.user?.name ?? "?";
+        labels.push(`${label}: ${a.quantity}`);
+      }
+    }
+    return {
+      id: x.id,
+      name: x.name,
+      manufacturer: x.manufacturer,
+      inventoryNumber: x.inventoryNumber,
+      toolClass: x.toolClass,
+      status: x.status,
+      quantity: x.quantity,
+      allocations,
+      holderSummary: labels.join(" · ") || "—",
+    };
+  }
+
+  const items = (tools as any[]).map((x) => ({ raw: x, item: toItem(x) }));
+
+  const visible = items.filter(({ raw }) => {
     if (!isField) return true;
-    return (
-      x.holderBrigadeId === session.user.brigadeId || x.holderUserId === session.user.id
+    return (raw.allocations as any[]).some(
+      (a) =>
+        (a.holderKind === "BRIGADE" && a.brigadeId === session.user.brigadeId && a.quantity > 0) ||
+        (a.holderKind === "PERSON" && a.userId === session.user.id && a.quantity > 0)
     );
   });
 
-  const toItem = (x: any): ToolItem => ({
-    id: x.id,
-    name: x.name,
-    inventoryNumber: x.inventoryNumber,
-    toolClass: x.toolClass,
-    status: x.status,
-    holderLabel: x.holderBrigade?.name ?? x.holderUser?.name ?? t("tools.warehouse"),
-    holderKey: x.holderBrigadeId
-      ? `b:${x.holderBrigadeId}`
-      : x.holderUserId
-        ? `p:${x.holderUserId}`
-        : "w",
-  });
-
-  let filtered = visibleTools;
-  if (tab === "people") filtered = visibleTools.filter((x) => x.holderUserId);
-  if (tab === "warehouse") filtered = visibleTools.filter((x) => !x.holderBrigadeId && !x.holderUserId);
+  let filtered = visible;
+  if (tab === "people")
+    filtered = visible.filter(({ raw }) =>
+      (raw.allocations as any[]).some((a) => a.holderKind === "PERSON" && a.quantity > 0)
+    );
+  if (tab === "warehouse")
+    filtered = visible.filter(({ raw }) =>
+      (raw.allocations as any[]).some((a) => a.holderKind === "WAREHOUSE" && a.quantity > 0)
+    );
   if (tab === "tooling")
-    filtered = visibleTools.filter((x) => ["TOOLING", "MODULES"].includes(x.toolClass));
-  if (tab === "brigades") filtered = visibleTools.filter((x) => x.holderBrigadeId);
+    filtered = visible.filter(({ raw }) => ["TOOLING", "MODULES"].includes(raw.toolClass));
+  if (tab === "brigades")
+    filtered = visible.filter(({ raw }) =>
+      (raw.allocations as any[]).some((a) => a.holderKind === "BRIGADE" && a.quantity > 0)
+    );
 
   const fmt = (d: Date) =>
-    new Date(d).toLocaleString("uk-UA", {
-      timeZone: "Europe/Kyiv",
-      dateStyle: "short",
-      timeStyle: "short",
-    });
+    new Date(d).toLocaleString("uk-UA", { timeZone: "Europe/Kyiv", dateStyle: "short", timeStyle: "short" });
 
-  const table = (list: any[]) => (
+  const brigadeOptions = brigades.map((b: any) => ({ id: b.id, name: b.name }));
+  const peopleOptions = people.map((p: any) => ({ id: p.id, name: p.name }));
+
+  const table = (list: { item: ToolItem }[]) => (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
       <table className="w-full text-sm">
         <thead>
@@ -98,6 +127,7 @@ export default async function ToolsPage({
             <th className="px-3 py-2">{t("tools.fields.name")}</th>
             <th className="px-3 py-2">{t("tools.fields.inv")}</th>
             <th className="px-3 py-2">{t("tools.fields.class")}</th>
+            <th className="px-3 py-2 text-center">{t("tools.fields.quantity")}</th>
             <th className="px-3 py-2">{t("tools.fields.status")}</th>
             <th className="px-3 py-2">{t("tools.fields.holder")}</th>
             <th className="w-10 px-3 py-2"></th>
@@ -106,17 +136,17 @@ export default async function ToolsPage({
         <tbody>
           {list.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-3 py-8 text-center text-neutral-400">
+              <td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
                 {t("tools.empty")}
               </td>
             </tr>
           )}
-          {list.map((x) => (
+          {list.map(({ item }) => (
             <ToolRow
-              key={x.id}
-              tool={toItem(x)}
-              brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
-              people={people.map((p: any) => ({ id: p.id, name: p.name }))}
+              key={item.id}
+              tool={item}
+              brigades={brigadeOptions}
+              people={peopleOptions}
               canManage={canManage}
               canDelete={canDelete}
             />
@@ -147,9 +177,11 @@ export default async function ToolsPage({
               "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
               (r.status === "NEW"
                 ? "bg-brand-orange/15 text-brand-orange"
-                : r.status === "DONE"
-                  ? "bg-brand/10 text-brand-dark"
-                  : "bg-neutral-200 text-neutral-600")
+                : r.status === "APPROVED"
+                  ? "bg-sky-100 text-sky-700"
+                  : r.status === "DONE"
+                    ? "bg-brand/10 text-brand-dark"
+                    : "bg-neutral-200 text-neutral-600")
             }
           >
             {t(`tools.requests.status.${r.status}` as any)}
@@ -176,7 +208,6 @@ export default async function ToolsPage({
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1">
         {TABS.map((tb) => {
-          // закупку бачать лише керівник, директор, комірник
           if (tb === "purchase" && !["ADMIN", "VIEWER", "STOREKEEPER"].includes(role)) return null;
           const badge =
             tb === "purchase"
@@ -219,13 +250,16 @@ export default async function ToolsPage({
               {brigades
                 .filter((b: any) => !isField || b.id === session.user.brigadeId)
                 .map((b: any) => {
-                  const list = filtered.filter((x) => x.holderBrigadeId === b.id);
+                  const list = filtered.filter(({ raw }) =>
+                    (raw.allocations as any[]).some(
+                      (a) => a.holderKind === "BRIGADE" && a.brigadeId === b.id && a.quantity > 0
+                    )
+                  );
                   if (list.length === 0 && isField) return null;
                   return (
                     <div key={b.id}>
                       <h2 className="mb-1.5 text-sm font-semibold text-neutral-700">
-                        {b.name}{" "}
-                        <span className="font-normal text-neutral-400">({list.length})</span>
+                        {b.name} <span className="font-normal text-neutral-400">({list.length})</span>
                       </h2>
                       {table(list)}
                     </div>

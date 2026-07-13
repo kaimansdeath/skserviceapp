@@ -6,7 +6,16 @@ import { useRouter } from "next/navigation";
 import { addTool } from "@/app/actions/tools";
 import { inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
-const CLASSES = ["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES", "ZIP", "CONSUMABLES", "OTHER"] as const;
+const CLASSES = [
+  "HAND",
+  "ELECTRIC",
+  "MEASURING",
+  "TOOLING",
+  "MODULES",
+  "ZIP",
+  "CONSUMABLES",
+  "OTHER",
+] as const;
 
 export default function AddToolForm() {
   const t = useTranslations("tools");
@@ -14,7 +23,14 @@ export default function AddToolForm() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [form, setForm] = useState({ name: "", inventoryNumber: "", toolClass: "HAND", note: "" });
+  const [form, setForm] = useState({
+    name: "",
+    manufacturer: "",
+    inventoryNumber: "",
+    toolClass: "HAND",
+    quantity: 1,
+    note: "",
+  });
 
   if (!open) {
     return (
@@ -29,15 +45,23 @@ export default function AddToolForm() {
       <label className="block">
         <span className="mb-1 block text-xs text-neutral-500">{t("fields.name")}</span>
         <input
-          className={inputCls + " w-56"}
+          className={inputCls + " w-48"}
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
       </label>
       <label className="block">
+        <span className="mb-1 block text-xs text-neutral-500">{t("fields.manufacturer")}</span>
+        <input
+          className={inputCls + " w-40"}
+          value={form.manufacturer}
+          onChange={(e) => setForm({ ...form, manufacturer: e.target.value })}
+        />
+      </label>
+      <label className="block">
         <span className="mb-1 block text-xs text-neutral-500">{t("fields.inv")}</span>
         <input
-          className={inputCls + " w-36"}
+          className={inputCls + " w-32"}
           value={form.inventoryNumber}
           onChange={(e) => setForm({ ...form, inventoryNumber: e.target.value })}
         />
@@ -45,7 +69,7 @@ export default function AddToolForm() {
       <label className="block">
         <span className="mb-1 block text-xs text-neutral-500">{t("fields.class")}</span>
         <select
-          className={inputCls + " w-44"}
+          className={inputCls + " w-40"}
           value={form.toolClass}
           onChange={(e) => setForm({ ...form, toolClass: e.target.value })}
         >
@@ -53,6 +77,16 @@ export default function AddToolForm() {
             <option key={c} value={c}>{t(`class.${c}` as any)}</option>
           ))}
         </select>
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-neutral-500">{t("fields.quantity")}</span>
+        <input
+          type="number"
+          min={1}
+          className={inputCls + " w-20"}
+          value={form.quantity}
+          onChange={(e) => setForm({ ...form, quantity: Math.max(1, parseInt(e.target.value || "1", 10)) })}
+        />
       </label>
       <label className="block flex-1">
         <span className="mb-1 block text-xs text-neutral-500">{t("fields.note")}</span>
@@ -69,11 +103,13 @@ export default function AddToolForm() {
           startTransition(async () => {
             await addTool({
               name: form.name,
+              manufacturer: form.manufacturer || null,
               inventoryNumber: form.inventoryNumber || null,
               toolClass: form.toolClass as any,
+              quantity: form.quantity,
               note: form.note || null,
             });
-            setForm({ name: "", inventoryNumber: "", toolClass: "HAND", note: "" });
+            setForm({ name: "", manufacturer: "", inventoryNumber: "", toolClass: "HAND", quantity: 1, note: "" });
             setOpen(false);
             router.refresh();
           })

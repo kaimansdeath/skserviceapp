@@ -21,8 +21,19 @@ async function requireToolManager() {
 
 const toolInput = z.object({
   name: z.string().min(1),
+  manufacturer: z.string().optional().nullable(),
   inventoryNumber: z.string().optional().nullable(),
-  toolClass: z.enum(["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES", "ZIP", "CONSUMABLES", "OTHER"]),
+  toolClass: z.enum([
+    "HAND",
+    "ELECTRIC",
+    "MEASURING",
+    "TOOLING",
+    "MODULES",
+    "ZIP",
+    "CONSUMABLES",
+    "OTHER",
+  ]),
+  quantity: z.number().int().min(1).default(1),
   note: z.string().optional().nullable(),
 });
 
@@ -37,13 +48,20 @@ export async function addTool(input: ToolInput) {
   const tool = await prisma.tool.create({
     data: {
       name: data.name.trim(),
+      manufacturer: data.manufacturer?.trim() || null,
       inventoryNumber: data.inventoryNumber?.trim() || null,
       toolClass: data.toolClass,
+      quantity: data.quantity,
       note: data.note?.trim() || null,
+      allocations: { create: { holderKind: "WAREHOUSE", quantity: data.quantity } },
     },
   });
   await prisma.toolMovement.create({
-    data: { toolId: tool.id, byUserId: session.user.id, text: "Додано. Розміщення: склад" },
+    data: {
+      toolId: tool.id,
+      byUserId: session.user.id,
+      text: `Додано. Кількість: ${data.quantity}. Розміщення: склад`,
+    },
   });
   revalidatePath("/", "layout");
   return { ok: true as const, id: tool.id };
@@ -81,57 +99,142 @@ export async function setToolStatus(toolId: string, status: "WORKING" | "BROKEN"
   return { ok: true as const };
 }
 
-export type ToolTarget =
-  | { type: "WAREHOUSE" }
-  | { type: "BRIGADE"; id: string }
-  | { type: "PERSON"; id: string };
+export type AllocationRow = {
+  key: string; // "w" | "b:<id>" | "p:<id>"
+  quantity: number;
+};
 
-async function holderLabel(tool: {
-  holderBrigadeId: string | null;
-  holderUserId: string | null;
-}): Promise<string> {
-  if (tool.holderBrigadeId) {
-    const b = await prisma.brigade.findUnique({ where: { id: tool.holderBrigadeId } });
+async function holderName(kind: string, brigadeId: string | null, userId: string | null) {
+  if (kind === "BRIGADE" && brigadeId) {
+    const b = await prisma.brigade.findUnique({ where: { id: brigadeId } });
     return b?.name ?? "?";
   }
-  if (tool.holderUserId) {
-    const u = await prisma.user.findUnique({ where: { id: tool.holderUserId } });
+  if (kind === "PERSON" && userId) {
+    const u = await prisma.user.findUnique({ where: { id: userId } });
     return u?.name ?? "?";
   }
   return "склад";
 }
 
-/** Переміщення інструменту: склад ↔ бригада ↔ особа */
-export async function moveTool(toolId: string, target: ToolTarget) {
+async function labelOfKey(key: string): Promise<string> {
+  if (key === "w") return "склад";
+  const [k, id] = key.split(":");
+  return holderName(k === "b" ? "BRIGADE" : "PERSON", k === "b" ? id : null, k === "p" ? id : null);
+}
+
+/**
+ * Перерозподілити кількість інструменту по місцях.
+ * rows — повний новий стан (склад + обрані бригади/люди), сума має дорівнювати tool.quantity.
+ */
+export async function distributeTool(toolId: string, rows: AllocationRow[]) {
   const session = await requireToolManager();
-  const tool = await prisma.tool.findUnique({ where: { id: toolId } });
+  const tool = await prisma.tool.findUnique({
+    where: { id: toolId },
+    include: { allocations: true },
+  });
   if (!tool) return { error: "NOT_FOUND" as const };
 
-  const from = await holderLabel(tool);
+  const filtered = rows.filter((r) => r.quantity > 0);
+  const total = filtered.reduce((sum, r) => sum + r.quantity, 0);
+  if (total !== tool.quantity) return { error: "QUANTITY_MISMATCH" as const };
 
-  let data: any;
-  let toLabel: string;
-  if (target.type === "WAREHOUSE") {
-    data = { holderBrigadeId: null, holderUserId: null };
-    toLabel = "склад";
-  } else if (target.type === "BRIGADE") {
-    const b = await prisma.brigade.findUnique({ where: { id: target.id } });
-    if (!b) return { error: "NOT_FOUND" as const };
-    data = { holderBrigadeId: b.id, holderUserId: null };
-    toLabel = b.name;
-  } else {
-    const u = await prisma.user.findUnique({ where: { id: target.id } });
-    if (!u) return { error: "NOT_FOUND" as const };
-    data = { holderBrigadeId: null, holderUserId: u.id };
-    toLabel = u.name;
+  const before = new Map<string, number>(
+    (tool.allocations as any[]).map((a) => [
+      a.holderKind === "WAREHOUSE" ? "w" : a.holderKind === "BRIGADE" ? `b:${a.brigadeId}` : `p:${a.userId}`,
+      a.quantity as number,
+    ])
+  );
+
+  const journalLines: string[] = [];
+  for (const key of new Set([...before.keys(), ...filtered.map((r) => r.key)])) {
+    const prevQ = before.get(key) ?? 0;
+    const newQ = filtered.find((r) => r.key === key)?.quantity ?? 0;
+    if (prevQ !== newQ) {
+      const label = await labelOfKey(key);
+      journalLines.push(`${label}: ${prevQ} → ${newQ}`);
+    }
   }
 
-  if (from === toLabel) return { ok: true as const };
+  await prisma.$transaction([
+    prisma.toolAllocation.deleteMany({ where: { toolId } }),
+    prisma.toolAllocation.createMany({
+      data: filtered.map((r) => {
+        if (r.key === "w") return { toolId, holderKind: "WAREHOUSE" as const, quantity: r.quantity };
+        const [k, id] = r.key.split(":");
+        return k === "b"
+          ? { toolId, holderKind: "BRIGADE" as const, brigadeId: id, quantity: r.quantity }
+          : { toolId, holderKind: "PERSON" as const, userId: id, quantity: r.quantity };
+      }),
+    }),
+  ]);
 
-  await prisma.tool.update({ where: { id: toolId }, data });
-  await prisma.toolMovement.create({
-    data: { toolId, byUserId: session.user.id, text: `Переміщення: ${from} → ${toLabel}` },
+  if (journalLines.length > 0) {
+    await prisma.toolMovement.create({
+      data: {
+        toolId,
+        byUserId: session.user.id,
+        text: `Перерозподіл: ${journalLines.join("; ")}`,
+      },
+    });
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Змінити загальну кількість позиції (різниця йде на склад) */
+export async function setToolQuantity(toolId: string, quantity: number) {
+  const session = await requireToolManager();
+  if (quantity < 0) return { error: "VALIDATION" as const };
+  const tool = await prisma.tool.findUnique({
+    where: { id: toolId },
+    include: { allocations: true },
   });
+  if (!tool) return { error: "NOT_FOUND" as const };
+
+  const distributed = (tool.allocations as any[])
+    .filter((a) => a.holderKind !== "WAREHOUSE")
+    .reduce((s, a) => s + a.quantity, 0);
+  if (quantity < distributed) return { error: "BELOW_DISTRIBUTED" as const };
+
+  const warehouseQty = quantity - distributed;
+  const existingWarehouse = (tool.allocations as any[]).find((a) => a.holderKind === "WAREHOUSE");
+
+  await prisma.$transaction([
+    prisma.tool.update({ where: { id: toolId }, data: { quantity } }),
+    existingWarehouse
+      ? prisma.toolAllocation.update({
+          where: { id: existingWarehouse.id },
+          data: { quantity: warehouseQty },
+        })
+      : prisma.toolAllocation.create({
+          data: { toolId, holderKind: "WAREHOUSE", quantity: warehouseQty },
+        }),
+  ]);
+  await prisma.toolMovement.create({
+    data: {
+      toolId,
+      byUserId: session.user.id,
+      text: `Загальна кількість: ${tool.quantity} → ${quantity}`,
+    },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Закрити заявку на закупку/видачу */
+export async function resolveToolRequest(requestId: string, status: "DONE" | "REJECTED") {
+  const session = await requireToolManager();
+  const req = await prisma.toolRequest.findUnique({ where: { id: requestId } });
+  if (!req) return { error: "NOT_FOUND" as const };
+  if (req.kind === "PURCHASE" && session.user.role !== "ADMIN") {
+    return { error: "FORBIDDEN" as const };
+  }
+  await prisma.toolRequest.update({
+    where: { id: requestId },
+    data: { status, resolvedById: session.user.id, resolvedAt: new Date() },
+  });
+  notifyToolRequestResolved(requestId, status).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const };
 }
@@ -159,29 +262,8 @@ export async function approveToolRequest(requestId: string) {
   if (!req || req.kind !== "ISSUE" || req.status !== "NEW") {
     return { error: "NOT_FOUND" as const };
   }
-  await prisma.toolRequest.update({
-    where: { id: requestId },
-    data: { status: "APPROVED" },
-  });
+  await prisma.toolRequest.update({ where: { id: requestId }, data: { status: "APPROVED" } });
   notifyIssueApproved(requestId).catch(() => {});
-  revalidatePath("/", "layout");
-  return { ok: true as const };
-}
-
-/** Закрити заявку на закупку/видачу */
-export async function resolveToolRequest(requestId: string, status: "DONE" | "REJECTED") {
-  const session = await requireToolManager();
-  const req = await prisma.toolRequest.findUnique({ where: { id: requestId } });
-  if (!req) return { error: "NOT_FOUND" as const };
-  // закупку закриває керівник; видачу — комірник або керівник
-  if (req.kind === "PURCHASE" && session.user.role !== "ADMIN") {
-    return { error: "FORBIDDEN" as const };
-  }
-  await prisma.toolRequest.update({
-    where: { id: requestId },
-    data: { status, resolvedById: session.user.id, resolvedAt: new Date() },
-  });
-  notifyToolRequestResolved(requestId, status).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

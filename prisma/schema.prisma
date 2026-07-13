@@ -84,10 +84,10 @@ model User {
   assignedTasks Task[]          @relation("TaskAssignees")
   statusLogs    TaskStatusLog[]
   taskComments  TaskComment[]
-  tools         Tool[]
-  toolMovements ToolMovement[]
-  toolRequests  ToolRequest[]   @relation("ToolRequestedBy")
-  pushSubs      PushSubscription[]
+  toolAllocations ToolAllocation[]
+  toolMovements   ToolMovement[]
+  toolRequests    ToolRequest[]   @relation("ToolRequestedBy")
+  pushSubs        PushSubscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -98,10 +98,10 @@ model Brigade {
   name     String  @unique
   isActive Boolean @default(true)
 
-  users          User[]
-  tasks          Task[] @relation("TaskPrimaryBrigade")
-  secondaryTasks Task[] @relation("TaskSecondBrigade")
-  tools          Tool[]
+  users            User[]
+  tasks            Task[] @relation("TaskPrimaryBrigade")
+  secondaryTasks   Task[] @relation("TaskSecondBrigade")
+  toolAllocations  ToolAllocation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -312,6 +312,12 @@ enum ToolStatus {
   LOST // втрачений
 }
 
+enum ToolHolderKind {
+  WAREHOUSE
+  BRIGADE
+  PERSON
+}
+
 enum ToolReqKind {
   PURCHASE // заявка на закупку
   ISSUE // заявка на видачу зі складу
@@ -324,26 +330,42 @@ enum ToolReqStatus {
   REJECTED
 }
 
-// Робочий інструмент (склад / бригада / особисте користування)
+// Робочий інструмент — позиція (може бути розподілена по кількох місцях за кількістю)
 model Tool {
   id              String     @id @default(cuid())
   name            String
+  manufacturer    String?
   inventoryNumber String?
   toolClass       ToolClass
   status          ToolStatus @default(WORKING)
+  quantity        Int        @default(1) // загальна кількість одиниць цієї позиції
   note            String?
-  holderBrigadeId String?
-  holderBrigade   Brigade?   @relation(fields: [holderBrigadeId], references: [id])
-  holderUserId    String?
-  holderUser      User?      @relation(fields: [holderUserId], references: [id])
 
-  movements ToolMovement[]
+  allocations ToolAllocation[]
+  movements   ToolMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
-  @@index([holderBrigadeId])
-  @@index([holderUserId])
+// Розподіл кількості інструменту по місцях: склад / бригада / людина.
+// Сума allocations.quantity по одному Tool завжди дорівнює Tool.quantity.
+model ToolAllocation {
+  id         String         @id @default(cuid())
+  toolId     String
+  tool       Tool           @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  holderKind ToolHolderKind
+  brigadeId  String?
+  brigade    Brigade?       @relation(fields: [brigadeId], references: [id])
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id])
+  quantity   Int            @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([toolId, holderKind, brigadeId, userId])
+  @@index([brigadeId])
+  @@index([userId])
 }
 
 // Журнал переміщень і змін інструменту
