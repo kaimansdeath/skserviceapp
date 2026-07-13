@@ -5,6 +5,8 @@ import { Link } from "@/i18n/routing";
 import ToolRow, { type ToolItem } from "@/components/tools/ToolRow";
 import AddToolForm from "@/components/tools/AddToolForm";
 import ToolRequestActions from "@/components/tools/ToolRequestActions";
+import AddToolRequestForm from "@/components/tools/AddToolRequestForm";
+import ToolsExcelButtons from "@/components/tools/ToolsExcelButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -155,7 +157,7 @@ export default async function ToolsPage({
           <span className="text-xs text-neutral-400">{fmt(r.createdAt)}</span>
           <span className="font-medium">{r.requestedBy?.name ?? "—"}</span>
           <span className="flex-1 whitespace-pre-wrap text-neutral-700">{r.text}</span>
-          {r.status === "NEW" && canManage && <ToolRequestActions requestId={r.id} />}
+          <ToolRequestActions requestId={r.id} kind={r.kind} status={r.status} role={role} />
         </div>
       ))}
     </div>
@@ -165,7 +167,11 @@ export default async function ToolsPage({
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{t("tools.title")}</h1>
-        {canManage && <AddToolForm />}
+        <div className="flex flex-wrap items-center gap-2">
+          {["ADMIN", "BRIGADE_LEADER", "STOREKEEPER"].includes(role) && <AddToolRequestForm />}
+          {canManage && <ToolsExcelButtons />}
+          {canManage && <AddToolForm />}
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1">
@@ -176,7 +182,7 @@ export default async function ToolsPage({
             tb === "purchase"
               ? purchaseRequests.filter((r: any) => r.status === "NEW").length
               : tb === "warehouse"
-                ? issueRequests.filter((r: any) => r.status === "NEW").length
+                ? issueRequests.filter((r: any) => ["NEW", "APPROVED"].includes(r.status)).length
                 : 0;
           return (
             <Link
@@ -205,7 +211,7 @@ export default async function ToolsPage({
           {tab === "warehouse" &&
             canManage &&
             requestsBlock(
-              issueRequests.filter((r: any) => r.status === "NEW"),
+              issueRequests.filter((r: any) => ["NEW", "APPROVED"].includes(r.status)),
               t("tools.requests.issueTitle")
             )}
           {tab === "brigades" ? (

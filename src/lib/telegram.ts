@@ -57,6 +57,11 @@ const T = {
     toolReqDone: "✅ Вашу заявку опрацьовано:",
     toolReqRejected: "❌ Вашу заявку відхилено:",
     onlyLeaders: "Ця дія доступна лише бригадирам.",
+    toolAskKind: "Оберіть тип заявки на інструмент:",
+    toolKindBuy: "🛒 Закупка",
+    toolKindIssue: "📦 Видача зі складу",
+    toolReqApproved: "✅ Вашу заявку на видачу погоджено — комірник підготує інструмент:",
+    toolIssueApprovedTitle: "📦 <b>Погоджена видача — підготуйте інструмент</b>",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -140,15 +145,20 @@ const T = {
     reqAdminTitle: "🆕 <b>Заявка на выезд</b>",
     reqAccepted:
       "✅ Ваша заявка принята в работу — выезд сервисной службы запланирован. Спасибо за обращение!",
-    toolBuyAsk: "✍️ Опишіть, який інструмент потрібно закупити (назва, кількість, для чого):",
+    toolBuyAsk: "✍️ Опишите, какой инструмент нужно закупить (название, количество, для чего):",
     toolIssueAsk:
-      "✍️ Опишіть, який інструмент видати зі складу і кому (бригада чи конкретна людина):",
-    toolReqSaved: "📨 Заявку передано. Ви отримаєте повідомлення після її опрацювання.",
-    toolBuyTitle: "🛒 <b>Заявка на закупку інструменту</b>",
-    toolIssueTitle: "📦 <b>Заявка на видачу інструменту</b>",
-    toolReqDone: "✅ Вашу заявку опрацьовано:",
-    toolReqRejected: "❌ Вашу заявку відхилено:",
-    onlyLeaders: "Ця дія доступна лише бригадирам.",
+      "✍️ Опишите, какой инструмент выдать со склада и кому (бригада или конкретный человек):",
+    toolReqSaved: "📨 Заявка передана. Вы получите сообщение после её обработки.",
+    toolBuyTitle: "🛒 <b>Заявка на закупку инструмента</b>",
+    toolIssueTitle: "📦 <b>Заявка на выдачу инструмента</b>",
+    toolReqDone: "✅ Ваша заявка обработана:",
+    toolReqRejected: "❌ Ваша заявка отклонена:",
+    onlyLeaders: "Это действие доступно только бригадирам.",
+    toolAskKind: "Выберите тип заявки на инструмент:",
+    toolKindBuy: "🛒 Закупка",
+    toolKindIssue: "📦 Выдача со склада",
+    toolReqApproved: "✅ Ваша заявка на выдачу согласована — кладовщик подготовит инструмент:",
+    toolIssueApprovedTitle: "📦 <b>Согласованная выдача — подготовьте инструмент</b>",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -463,8 +473,7 @@ export async function setChatMenu(chatId: string, role: string) {
       { command: "current", description: "Поточна задача" },
       { command: "tasks", description: "Мої задачі" },
       { command: "archive", description: "Архів задач" },
-      { command: "toolbuy", description: "Заявка на закупку інструменту" },
-      { command: "toolissue", description: "Заявка на видачу інструменту" },
+      { command: "tool", description: "Заявка на інструмент" },
     ];
   } else if (role === "BRIGADE_MEMBER") {
     cmds = [
@@ -502,7 +511,7 @@ export async function notifyToolRequestResolved(requestId: string, status: "DONE
     .catch(() => {});
 }
 
-async function notifyToolRequest(requestId: string) {
+export async function notifyToolRequestCreated(requestId: string) {
   const bot = getBot();
   if (!bot) return;
   const req = await prisma.toolRequest.findUnique({
@@ -510,7 +519,8 @@ async function notifyToolRequest(requestId: string) {
     include: { requestedBy: true },
   });
   if (!req) return;
-  const roles = req.kind === "PURCHASE" ? ["ADMIN"] : ["ADMIN", "STOREKEEPER"];
+  // нові заявки (і закупка, і видача) спершу йдуть керівнику на погодження
+  const roles = ["ADMIN"];
   const recipients = await prisma.user.findMany({
     where: { role: { in: roles as any }, isActive: true, telegramChatId: { not: null } },
   });
@@ -523,6 +533,41 @@ async function notifyToolRequest(requestId: string) {
     if (base) lines.push(`\n${base}/${lang}/tools?tab=${tab}`);
     await bot.api
       .sendMessage(r.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
+      .catch(() => {});
+  }
+}
+
+/** Погоджена видача: завдання комірникам + підтвердження заявнику */
+export async function notifyIssueApproved(requestId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const req = await prisma.toolRequest.findUnique({
+    where: { id: requestId },
+    include: { requestedBy: true },
+  });
+  if (!req) return;
+  const base = (process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
+  const keepers = await prisma.user.findMany({
+    where: { role: "STOREKEEPER", isActive: true, telegramChatId: { not: null } },
+  });
+  for (const k of keepers) {
+    const lang = langOf(k);
+    const lines: string[] = [
+      T[lang].toolIssueApprovedTitle,
+      `<b>${esc((req as any).requestedBy?.name ?? "—")}</b>`,
+      "",
+      esc(req.text),
+    ];
+    if (base) lines.push(`\n${base}/${lang}/tools?tab=warehouse`);
+    await bot.api
+      .sendMessage(k.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
+      .catch(() => {});
+  }
+  const chat = (req as any).requestedBy?.telegramChatId;
+  if (chat) {
+    const lang = langOf((req as any).requestedBy);
+    await bot.api
+      .sendMessage(chat, `${T[lang].toolReqApproved}\n${esc(req.text)}`, { parse_mode: "HTML" })
       .catch(() => {});
   }
 }
@@ -863,6 +908,40 @@ function registerHandlers(bot: Bot) {
     await ctx.reply(T[lang].reqNotFound);
   });
 
+  // Єдина кнопка "Заявка на інструмент": вибір типу
+  bot.command("tool", async (ctx) => {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+    }
+    const lang = langOf(user);
+    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+      return ctx.reply(T[lang].onlyLeaders);
+    }
+    await ctx.reply(T[lang].toolAskKind, {
+      reply_markup: new InlineKeyboard()
+        .text(T[lang].toolKindBuy, "toolreq:PURCHASE")
+        .text(T[lang].toolKindIssue, "toolreq:ISSUE"),
+    });
+  });
+
+  bot.callbackQuery(/^toolreq:(PURCHASE|ISSUE)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    if (!user) return;
+    const lang = langOf(user);
+    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+      return ctx.reply(T[lang].onlyLeaders);
+    }
+    const kind = ctx.match![1] as "PURCHASE" | "ISSUE";
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { tgPendingAction: JSON.stringify({ type: "toolreq", kind }) },
+    });
+    await ctx.reply(kind === "PURCHASE" ? T[lang].toolBuyAsk : T[lang].toolIssueAsk);
+  });
+
   // Заявки на інструмент (лише бригадири)
   for (const [cmd, kind] of [
     ["toolbuy", "PURCHASE"],
@@ -1073,7 +1152,7 @@ function registerHandlers(bot: Bot) {
         data: { kind: pending.kind, text, requestedById: user.id },
       });
       await ctx.reply(T[lang].toolReqSaved);
-      notifyToolRequest(req.id).catch(() => {});
+      notifyToolRequestCreated(req.id).catch(() => {});
       return;
     }
 

@@ -37,7 +37,7 @@ const machineInput = z.object({
   typeId: z.string().min(1),
   model: z.string().min(1),
   serialNumber: z.string().optional().nullable(),
-  warrantyMonths: z.number().int().min(1).max(120).default(12),
+  warrantyMonths: z.number().int().min(0).max(120).default(12),
   note: z.string().optional().nullable(),
 });
 

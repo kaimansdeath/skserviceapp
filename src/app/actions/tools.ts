@@ -4,7 +4,11 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/authz";
-import { notifyToolRequestResolved } from "@/lib/telegram";
+import {
+  notifyToolRequestResolved,
+  notifyToolRequestCreated,
+  notifyIssueApproved,
+} from "@/lib/telegram";
 
 /** Керувати інструментом можуть лише керівник відділу та комірник */
 async function requireToolManager() {
@@ -18,7 +22,7 @@ async function requireToolManager() {
 const toolInput = z.object({
   name: z.string().min(1),
   inventoryNumber: z.string().optional().nullable(),
-  toolClass: z.enum(["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES"]),
+  toolClass: z.enum(["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES", "ZIP", "CONSUMABLES", "OTHER"]),
   note: z.string().optional().nullable(),
 });
 
@@ -128,6 +132,38 @@ export async function moveTool(toolId: string, target: ToolTarget) {
   await prisma.toolMovement.create({
     data: { toolId, byUserId: session.user.id, text: `Переміщення: ${from} → ${toLabel}` },
   });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Нова заявка з веб-інтерфейсу (бригадир / керівник / комірник) */
+export async function addToolRequest(kind: "PURCHASE" | "ISSUE", text: string) {
+  const session = await requireSession();
+  if (!["ADMIN", "BRIGADE_LEADER", "STOREKEEPER"].includes(session.user.role)) {
+    return { error: "FORBIDDEN" as const };
+  }
+  if (!text.trim()) return { error: "EMPTY" as const };
+  const req = await prisma.toolRequest.create({
+    data: { kind, text: text.trim(), requestedById: session.user.id },
+  });
+  notifyToolRequestCreated(req.id).catch(() => {});
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Погодження видачі керівником → комірник отримує завдання видати */
+export async function approveToolRequest(requestId: string) {
+  const session = await requireSession();
+  if (session.user.role !== "ADMIN") return { error: "FORBIDDEN" as const };
+  const req = await prisma.toolRequest.findUnique({ where: { id: requestId } });
+  if (!req || req.kind !== "ISSUE" || req.status !== "NEW") {
+    return { error: "NOT_FOUND" as const };
+  }
+  await prisma.toolRequest.update({
+    where: { id: requestId },
+    data: { status: "APPROVED" },
+  });
+  notifyIssueApproved(requestId).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

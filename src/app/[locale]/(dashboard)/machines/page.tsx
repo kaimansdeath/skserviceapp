@@ -24,6 +24,7 @@ export default async function MachinesPage({
   const today = kyivToday();
   const session = (await auth())!;
   if (session.user.role === "STOREKEEPER") redirect("/tools");
+  const isAdmin = session.user.role === "ADMIN";
 
   const clientFilter: any = {};
   if (searchParams.manager) clientFilter.managerId = searchParams.manager;
@@ -59,9 +60,19 @@ export default async function MachinesPage({
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">{t("machinesList.title")}</h1>
-        <span className="text-sm text-neutral-500">
-          {t("machinesList.units", { units: machines.length })}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-neutral-500">
+            {t("machinesList.units", { units: machines.length })}
+          </span>
+          {isAdmin && (
+            <Link
+              href="/machines/new"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+            >
+              + {t("machinesList.addMachine")}
+            </Link>
+          )}
+        </div>
       </div>
 
       <MachinesFilters

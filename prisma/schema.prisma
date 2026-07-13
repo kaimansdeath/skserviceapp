@@ -300,6 +300,9 @@ enum ToolClass {
   MEASURING // вимірювальний
   TOOLING // оснастка
   MODULES // модулі
+  ZIP // ЗІП
+  CONSUMABLES // витратні матеріали
+  OTHER // інше
 }
 
 enum ToolStatus {
@@ -314,7 +317,8 @@ enum ToolReqKind {
 }
 
 enum ToolReqStatus {
-  NEW
+  NEW // нова
+  APPROVED // погоджена керівником (видача — чекає на комірника)
   DONE
   REJECTED
 }

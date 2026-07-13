@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { addTool } from "@/app/actions/tools";
 import { inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
-const CLASSES = ["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES"] as const;
+const CLASSES = ["HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES", "ZIP", "CONSUMABLES", "OTHER"] as const;
 
 export default function AddToolForm() {
   const t = useTranslations("tools");

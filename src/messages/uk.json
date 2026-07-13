@@ -259,7 +259,8 @@
     "commissioned": "Введено в експлуатацію",
     "warrantyUntil": "Гарантія до",
     "months": "міс.",
-    "defaultDateHint": "ПНР не зафіксовано в системі — дата запуску умовно 01.01.2024"
+    "defaultDateHint": "ПНР не зафіксовано в системі — дата запуску умовно 01.01.2024",
+    "addMachine": "Додати верстат"
   },
   "archive": {
     "title": "Архів",
@@ -352,7 +353,10 @@
       "ELECTRIC": "Електричний",
       "MEASURING": "Вимірювальний",
       "TOOLING": "Оснастка",
-      "MODULES": "Модулі"
+      "MODULES": "Модулі",
+      "ZIP": "ЗІП",
+      "CONSUMABLES": "Витратні матеріали",
+      "OTHER": "Інше"
     },
     "status": {
       "WORKING": "Робочий",
@@ -368,8 +372,23 @@
       "status": {
         "NEW": "Нова",
         "DONE": "Виконана",
-        "REJECTED": "Відхилена"
-      }
+        "REJECTED": "Відхилена",
+        "APPROVED": "Погоджена"
+      },
+      "addRequest": "Додати заявку",
+      "kind": "Тип заявки",
+      "kindIssue": "Видача зі складу",
+      "kindPurchase": "Закупка",
+      "text": "Текст заявки",
+      "textPlaceholder": "Що потрібно і кому…",
+      "approve": "Погодити",
+      "issued": "Видано"
+    },
+    "excel": {
+      "export": "Експорт Excel",
+      "import": "Імпорт Excel",
+      "imported": "Імпортовано: {count}",
+      "importError": "Помилка імпорту — перевірте формат файлу"
     }
   }
 }

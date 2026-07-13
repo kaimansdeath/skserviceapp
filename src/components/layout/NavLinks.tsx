@@ -8,10 +8,10 @@ const ITEMS: Array<{ href: string; key: string; roles?: string[] }> = [
   { href: "/tasks", key: "tasks" },
   { href: "/archive", key: "archive" },
   { href: "/requests", key: "requests", roles: ["ADMIN", "VIEWER"] },
-  { href: "/tools", key: "tools" },
   { href: "/clients", key: "clients" },
   { href: "/machines", key: "machines" },
   { href: "/brigades", key: "brigades", roles: ["ADMIN", "VIEWER"] },
+  { href: "/tools", key: "tools" },
   { href: "/reports", key: "reports", roles: ["ADMIN", "VIEWER", "ACCOUNTANT"] },
 ];
 
