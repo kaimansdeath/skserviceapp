@@ -1,6 +1,3 @@
--- AlterEnum
-ALTER TYPE "Role" ADD VALUE 'STOREKEEPER';
-
 -- CreateEnum
 CREATE TYPE "ToolClass" AS ENUM ('HAND', 'ELECTRIC', 'MEASURING', 'TOOLING', 'MODULES');
 
