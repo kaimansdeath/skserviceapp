@@ -87,6 +87,7 @@ model User {
   tools         Tool[]
   toolMovements ToolMovement[]
   toolRequests  ToolRequest[]   @relation("ToolRequestedBy")
+  pushSubs      PushSubscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -373,6 +374,20 @@ model ToolRequest {
   createdAt DateTime @default(now())
 
   @@index([kind, status, createdAt])
+}
+
+// Web Push підписки (PWA-нотифікації)
+model PushSubscription {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model GeoCache {

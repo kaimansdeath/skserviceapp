@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Link } from "@/i18n/routing";
 import LocaleSwitcher from "./LocaleSwitcher";
+import PushToggle from "./PushToggle";
 import SignOutButton from "./SignOutButton";
 import NavLinks from "./NavLinks";
 
@@ -29,6 +30,7 @@ export default async function Header() {
               · {t(`roles.${role}` as any)}
             </span>
           </span>
+          <PushToggle />
           <LocaleSwitcher />
           <SignOutButton />
         </div>

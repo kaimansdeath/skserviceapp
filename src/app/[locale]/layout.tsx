@@ -23,8 +23,24 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   const t = await getTranslations({ locale, namespace: "app" });
-  return { title: t("title") };
+  return {
+    title: t("title"),
+    manifest: "/manifest.webmanifest",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: "СК Сервіс",
+    },
+    icons: {
+      icon: "/icons/icon-192.png",
+      apple: "/icons/apple-touch-icon.png",
+    },
+  };
 }
+
+export const viewport = {
+  themeColor: "#009C4B",
+};
 
 export default async function LocaleLayout({
   children,

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { applyStatusChange } from "@/lib/taskService";
 import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
 import { formatDateUa, kyivToday, isOverdue } from "@/lib/dates";
+import { sendPushToUsers, sendPushToRoles } from "@/lib/push";
 import ukMsgs from "@/messages/uk.json";
 import ruMsgs from "@/messages/ru.json";
 
@@ -383,6 +384,19 @@ export async function notifyTaskAssigned(taskId: string): Promise<void> {
       // не валимо операцію через збій відправлення (заблокований бот тощо)
     }
   }
+
+  // Web Push бригадирам-виконавцям
+  sendPushToUsers(
+    (task as any).assignees
+      .filter((u: any) => u.role === "BRIGADE_LEADER")
+      .map((u: any) => u.id),
+    {
+      title: "🆕 Нова задача",
+      body: `${(task as any).client.name}, ${task.city} · ${formatDateUa(task.dateFrom)}–${formatDateUa(task.dateTo)}`,
+      url: `/uk/tasks/${task.id}`,
+      tag: `task-${task.id}`,
+    }
+  ).catch(() => {});
 }
 
 /** Щоденний дайджест керівникам відділу */
@@ -535,6 +549,13 @@ export async function notifyToolRequestCreated(requestId: string) {
       .sendMessage(r.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
       .catch(() => {});
   }
+
+  sendPushToRoles(["ADMIN"], {
+    title: req.kind === "PURCHASE" ? "🛒 Заявка на закупку" : "📦 Заявка на видачу",
+    body: req.text.slice(0, 120),
+    url: `/uk/tools?tab=${tab}`,
+    tag: `treq-${req.id}`,
+  }).catch(() => {});
 }
 
 /** Погоджена видача: завдання комірникам + підтвердження заявнику */
@@ -570,6 +591,13 @@ export async function notifyIssueApproved(requestId: string) {
       .sendMessage(chat, `${T[lang].toolReqApproved}\n${esc(req.text)}`, { parse_mode: "HTML" })
       .catch(() => {});
   }
+
+  sendPushToRoles(["STOREKEEPER"], {
+    title: "📦 Погоджена видача",
+    body: req.text.slice(0, 120),
+    url: "/uk/tools?tab=warehouse",
+    tag: `treq-${req.id}`,
+  }).catch(() => {});
 }
 
 function requestIntroKeyboard(lang: Lang): InlineKeyboard {
@@ -623,6 +651,13 @@ async function notifyAdminsNewRequest(requestId: string) {
       .sendMessage(admin.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
       .catch(() => {});
   }
+
+  sendPushToRoles(["ADMIN", "VIEWER"], {
+    title: "🆕 Заявка на виїзд",
+    body: req.problem.slice(0, 120),
+    url: "/uk/requests",
+    tag: `sreq-${req.id}`,
+  }).catch(() => {});
 }
 
 /** Сповіщення заявнику: заявку взято в роботу (створено задачу) */
@@ -1270,6 +1305,16 @@ export async function notifyTaskComment(taskId: string, authorId: string, text: 
       )
       .catch(() => {});
   }
+
+  sendPushToUsers(
+    recipients.map((r: any) => r.id),
+    {
+      title: `💬 ${author.name}`,
+      body: text.slice(0, 120),
+      url: `/uk/tasks/${taskId}`,
+      tag: `task-${taskId}`,
+    }
+  ).catch(() => {});
 }
 
 /**
@@ -1302,4 +1347,14 @@ export async function notifyMembersConfirmed(taskId: string) {
       )
       .catch(() => {});
   }
+
+  sendPushToUsers(
+    (task as any).assignees.map((u: any) => u.id),
+    {
+      title: "✅ Задачу підтверджено",
+      body: `${(task as any).client.name}, ${task.city}`,
+      url: `/uk/tasks/${task.id}`,
+      tag: `task-${task.id}`,
+    }
+  ).catch(() => {});
 }
