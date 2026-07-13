@@ -2,7 +2,8 @@ import { getTranslations, getLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formatDateUa } from "@/lib/dates";
+import { formatDateUa, kyivToday } from "@/lib/dates";
+import { warrantyEnd, DEFAULT_COMMISSIONING } from "@/lib/warranty";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
 
@@ -27,6 +28,13 @@ export default async function MachinePage({ params }: { params: { id: string } }
     orderBy: { dateFrom: "desc" },
   });
 
+  const lastPnr = (tasks as any[])
+    .filter((x) => x.taskType === "PNR" && x.status === "DONE")
+    .sort((a, b) => b.dateTo.getTime() - a.dateTo.getTime())[0];
+  const commissioning = lastPnr ? lastPnr.dateTo : DEFAULT_COMMISSIONING;
+  const wEnd = warrantyEnd(commissioning, (machine as any).warrantyMonths);
+  const wExpired = wEnd < kyivToday();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -38,6 +46,12 @@ export default async function MachinePage({ params }: { params: { id: string } }
             <Link href={`/clients/${machine.clientId}`} className="text-brand-dark hover:underline">
               {machine.client.name}
             </Link>
+          </p>
+          <p className="mt-0.5 text-sm">
+            <span className="text-neutral-500">{t("machinesList.commissioned")}: {formatDateUa(commissioning)}</span>
+            <span className={"ml-3 " + (wExpired ? "font-semibold text-red-600" : "text-neutral-500")}>
+              {t("machinesList.warrantyUntil")}: {formatDateUa(wEnd)} ({(machine as any).warrantyMonths} {t("machinesList.months")})
+            </span>
           </p>
           {machine.note && <p className="mt-1 text-sm text-neutral-600">{machine.note}</p>}
         </div>

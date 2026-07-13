@@ -37,6 +37,7 @@ const machineInput = z.object({
   typeId: z.string().min(1),
   model: z.string().min(1),
   serialNumber: z.string().optional().nullable(),
+  warrantyMonths: z.number().int().min(1).max(120).default(12),
   note: z.string().optional().nullable(),
 });
 
@@ -48,6 +49,7 @@ export async function saveMachine(id: string | null, input: z.infer<typeof machi
     typeId: data.typeId,
     model: data.model.trim(),
     serialNumber: data.serialNumber?.trim() || null,
+    warrantyMonths: data.warrantyMonths,
     note: data.note?.trim() || null,
   };
   const machine = id

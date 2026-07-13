@@ -21,15 +21,39 @@ export function canTouchBrigade(session: { user: { role: string; brigadeId: stri
   return false;
 }
 
-/** Чи може користувач працювати із задачею (враховує другу бригаду) */
+/**
+ * Чи може користувач ЗМІНЮВАТИ задачу (статуси).
+ * Адмін — так; бригадир — якщо призначений на задачу (або legacy-збіг бригади);
+ * працівник бригади — ні (лише перегляд).
+ */
 export function canTouchTask(
-  session: { user: { role: string; brigadeId: string | null } },
-  task: { brigadeId: string | null; secondBrigadeId?: string | null }
+  session: { user: { id?: string; role: string; brigadeId: string | null } },
+  task: {
+    brigadeId: string | null;
+    secondBrigadeId?: string | null;
+    assigneeIds?: string[];
+  }
 ) {
   if (session.user.role === "ADMIN") return true;
-  if (session.user.role !== "BRIGADE_LEADER" || !session.user.brigadeId) return false;
+  if (session.user.role !== "BRIGADE_LEADER") return false;
+  if (session.user.id && task.assigneeIds?.includes(session.user.id)) return true;
+  if (!session.user.brigadeId) return false;
   return (
     session.user.brigadeId === task.brigadeId ||
     session.user.brigadeId === (task.secondBrigadeId ?? null)
+  );
+}
+
+/** Чи бачить користувач задачу */
+export function canSeeTask(
+  session: { user: { id: string; role: string; brigadeId: string | null } },
+  task: { brigadeId: string | null; secondBrigadeId?: string | null; assigneeIds?: string[] }
+) {
+  if (["ADMIN", "VIEWER", "ACCOUNTANT"].includes(session.user.role)) return true;
+  if (task.assigneeIds?.includes(session.user.id)) return true;
+  return (
+    !!session.user.brigadeId &&
+    (session.user.brigadeId === task.brigadeId ||
+      session.user.brigadeId === (task.secondBrigadeId ?? null))
   );
 }

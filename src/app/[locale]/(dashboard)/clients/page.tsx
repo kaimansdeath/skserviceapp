@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Link } from "@/i18n/routing";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function ClientsPage() {
   const t = await getTranslations();
   const session = (await auth())!;
+  if (session.user.role === "STOREKEEPER") redirect("/tools");
   const isAdmin = session.user.role === "ADMIN";
 
   const clients = await prisma.client.findMany({

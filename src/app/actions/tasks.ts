@@ -8,7 +8,12 @@ import { applyStatusChange } from "@/lib/taskService";
 import { findOverlaps } from "@/lib/overlap";
 import { REASON_STATUSES, type TaskStatusValue } from "@/lib/taskStatus";
 import { dateFieldFromYmd, toYmd } from "@/lib/dates";
-import { notifyTaskAssigned, notifyTaskComment } from "@/lib/telegram";
+import {
+  notifyTaskAssigned,
+  notifyTaskComment,
+  notifyMembersConfirmed,
+  notifyRequesterAccepted,
+} from "@/lib/telegram";
 import { canTouchTask } from "@/lib/authz";
 
 const taskInput = z
@@ -17,8 +22,8 @@ const taskInput = z
       .enum(["ENGINEERING", "PNR", "REPAIR", "DEFECTATION", "VISIT", "OTHER"])
       .default("OTHER"),
     executorType: z.enum(["BRIGADE", "OUTSOURCE"]).default("BRIGADE"),
-    brigadeId: z.string().optional().nullable(),
-    secondBrigadeId: z.string().optional().nullable(),
+    assigneeIds: z.array(z.string()).default([]),
+    requestId: z.string().optional().nullable(),
     outsourceName: z.string().optional().nullable(),
     clientId: z.string().min(1),
     machineIds: z.array(z.string()).default([]),
@@ -30,26 +35,54 @@ const taskInput = z
     dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   })
-  .refine((d) => (d.executorType === "BRIGADE" ? !!d.brigadeId : !!d.outsourceName?.trim()), {
-    message: "EXECUTOR_REQUIRED",
-  });
+  .refine(
+    (d) => (d.executorType === "BRIGADE" ? d.assigneeIds.length > 0 : !!d.outsourceName?.trim()),
+    { message: "EXECUTOR_REQUIRED" }
+  );
 
 export type TaskInput = z.infer<typeof taskInput>;
+
+/** З обраних людей визначаємо бригади задачі; вимагаємо хоча б одного бригадира */
+async function resolveAssignees(assigneeIds: string[]) {
+  const users = await prisma.user.findMany({
+    where: { id: { in: assigneeIds }, isActive: true },
+    select: { id: true, role: true, brigadeId: true },
+  });
+  const leaders = users.filter((u: any) => u.role === "BRIGADE_LEADER");
+  if (leaders.length === 0) return { error: "LEADER_REQUIRED" as const };
+  const brigadeIds: string[] = [];
+  for (const u of users as any[]) {
+    if (u.brigadeId && !brigadeIds.includes(u.brigadeId)) brigadeIds.push(u.brigadeId);
+  }
+  return {
+    ok: true as const,
+    ids: users.map((u: any) => u.id as string),
+    brigadeId: brigadeIds[0] ?? null,
+    secondBrigadeId: brigadeIds[1] ?? null,
+  };
+}
 
 export async function createTask(input: TaskInput) {
   const session = await requireAdmin();
   const data = taskInput.parse(input);
   if (data.dateTo < data.dateFrom) return { error: "DATE_RANGE" as const };
 
+  let resolved: Awaited<ReturnType<typeof resolveAssignees>> | null = null;
+  if (data.executorType === "BRIGADE") {
+    resolved = await resolveAssignees(data.assigneeIds);
+    if ("error" in resolved) return { error: "LEADER_REQUIRED" as const };
+  }
+
   const task = await prisma.task.create({
     data: {
       taskType: data.taskType,
       executorType: data.executorType,
-      brigadeId: data.executorType === "BRIGADE" ? data.brigadeId! : null,
-      secondBrigadeId:
-        data.executorType === "BRIGADE" && data.secondBrigadeId && data.secondBrigadeId !== data.brigadeId
-          ? data.secondBrigadeId
-          : null,
+      brigadeId: resolved && "ok" in resolved ? resolved.brigadeId : null,
+      secondBrigadeId: resolved && "ok" in resolved ? resolved.secondBrigadeId : null,
+      assignees:
+        resolved && "ok" in resolved
+          ? { connect: resolved.ids.map((id: string) => ({ id })) }
+          : undefined,
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machines: data.machineIds.length
@@ -74,6 +107,14 @@ export async function createTask(input: TaskInput) {
     },
   });
   // Telegram-сповіщення бригадиру (не валить операцію при збої)
+  // задача створена із заявки — закриваємо заявку та повідомляємо заявника
+  if (data.requestId) {
+    await prisma.serviceRequest
+      .update({ where: { id: data.requestId }, data: { status: "CLOSED", taskId: task.id } })
+      .catch(() => {});
+    notifyRequesterAccepted(data.requestId).catch(() => {});
+  }
+
   notifyTaskAssigned(task.id).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const, id: task.id };
@@ -88,7 +129,13 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
   if (!existing) return { error: "NOT_FOUND" as const };
 
   const statusChanged = input.status && input.status !== existing.status;
-  const newBrigadeId = data.executorType === "BRIGADE" ? data.brigadeId! : null;
+
+  let resolved: Awaited<ReturnType<typeof resolveAssignees>> | null = null;
+  if (data.executorType === "BRIGADE") {
+    resolved = await resolveAssignees(data.assigneeIds);
+    if ("error" in resolved) return { error: "LEADER_REQUIRED" as const };
+  }
+  const newBrigadeId = resolved && "ok" in resolved ? resolved.brigadeId : null;
   const brigadeChanged = newBrigadeId !== existing.brigadeId && newBrigadeId !== null;
 
   await prisma.task.update({
@@ -97,10 +144,10 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
       taskType: data.taskType,
       executorType: data.executorType,
       brigadeId: newBrigadeId,
-      secondBrigadeId:
-        data.executorType === "BRIGADE" && data.secondBrigadeId && data.secondBrigadeId !== newBrigadeId
-          ? data.secondBrigadeId
-          : null,
+      secondBrigadeId: resolved && "ok" in resolved ? resolved.secondBrigadeId : null,
+      assignees: {
+        set: resolved && "ok" in resolved ? resolved.ids.map((id: string) => ({ id })) : [],
+      },
       outsourceName: data.executorType === "OUTSOURCE" ? data.outsourceName!.trim() : null,
       clientId: data.clientId,
       machines: { set: data.machineIds.map((id) => ({ id })) },
@@ -161,6 +208,7 @@ export async function changeTaskStatus(params: {
     source: "WEB",
   });
   if ("error" in res) return res;
+  if (params.to === "CONFIRMED") notifyMembersConfirmed(params.taskId).catch(() => {});
   revalidatePath("/", "layout");
   return { ok: true as const };
 }

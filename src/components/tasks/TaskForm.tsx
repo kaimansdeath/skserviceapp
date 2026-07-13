@@ -7,6 +7,7 @@ import { createTask, updateTask, checkOverlap, type TaskInput } from "@/app/acti
 import { saveClient, addInvoice, saveMachine } from "@/app/actions/clients";
 import { ALL_STATUSES, TASK_TYPES, type TaskStatusValue } from "@/lib/taskStatus";
 import { OBLASTS } from "@/lib/oblasts";
+import { WARRANTY_OPTIONS } from "@/lib/warranty";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
 export type ClientOption = {
@@ -20,7 +21,9 @@ export type ClientOption = {
 
 type Initial = Partial<TaskInput> & {
   id?: string;
+  requestId?: string;
   machineIds?: string[];
+  assigneeIds?: string[];
   status?: TaskStatusValue;
   failureReason?: string | null;
 };
@@ -38,15 +41,23 @@ function OblastSelect({ value, onChange }: { value: string; onChange: (v: string
   );
 }
 
+export type StaffOption = {
+  id: string;
+  name: string;
+  role: string; // BRIGADE_LEADER | BRIGADE_MEMBER
+  brigadeId: string | null;
+  brigadeName: string | null;
+};
+
 export default function TaskForm({
   clients: clientsProp,
-  brigades,
+  staff,
   machineTypes,
   initial,
   isAdmin,
 }: {
   clients: ClientOption[];
-  brigades: { id: string; name: string }[];
+  staff: StaffOption[];
   machineTypes: { id: string; name: string }[];
   initial?: Initial;
   isAdmin: boolean;
@@ -64,8 +75,7 @@ export default function TaskForm({
   const [form, setForm] = useState({
     taskType: (initial?.taskType ?? "OTHER") as (typeof TASK_TYPES)[number],
     executorType: (initial?.executorType ?? "BRIGADE") as "BRIGADE" | "OUTSOURCE",
-    brigadeId: initial?.brigadeId ?? "",
-    secondBrigadeId: initial?.secondBrigadeId ?? "",
+    assigneeIds: (initial?.assigneeIds ?? []) as string[],
     outsourceName: initial?.outsourceName ?? "",
     clientId: initial?.clientId ?? "",
     machineIds: (initial?.machineIds ?? []) as string[],
@@ -89,9 +99,15 @@ export default function TaskForm({
   const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "" });
   const [qcPending, startQcTransition] = useTransition();
 
+  // Пошук у списку клієнтів
+  const [clientQuery, setClientQuery] = useState("");
+  const filteredClients = clientQuery.trim()
+    ? clients.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+    : clients;
+
   // Швидке додавання верстата
   const [showQuickMachine, setShowQuickMachine] = useState(false);
-  const [qm, setQm] = useState({ typeId: "", model: "", serialNumber: "" });
+  const [qm, setQm] = useState({ typeId: "", model: "", serialNumber: "", warrantyMonths: 12 });
   const [qmPending, startQmTransition] = useTransition();
 
   function quickAddMachine() {
@@ -102,6 +118,7 @@ export default function TaskForm({
         typeId: qm.typeId,
         model: qm.model,
         serialNumber: qm.serialNumber || null,
+        warrantyMonths: qm.warrantyMonths,
         note: null,
       });
       if ("error" in res) return;
@@ -113,7 +130,7 @@ export default function TaskForm({
       );
       setForm((f) => ({ ...f, machineIds: [...f.machineIds, res.id] }));
       setShowQuickMachine(false);
-      setQm({ typeId: "", model: "", serialNumber: "" });
+      setQm({ typeId: "", model: "", serialNumber: "", warrantyMonths: 12 });
     });
   }
 
@@ -193,10 +210,17 @@ export default function TaskForm({
     });
   }
 
-  // Перевірка перетину дат для обох бригад — попередження, не блокування
+  // Перевірка перетину дат для бригад обраних людей — попередження, не блокування
+  const selectedBrigadeIds = Array.from(
+    new Set(
+      staff
+        .filter((p) => form.assigneeIds.includes(p.id) && p.brigadeId)
+        .map((p) => p.brigadeId as string)
+    )
+  );
   useEffect(() => {
     let cancelled = false;
-    const brigadeIds = [form.brigadeId, form.secondBrigadeId].filter(Boolean) as string[];
+    const brigadeIds = selectedBrigadeIds;
     if (
       form.executorType === "BRIGADE" &&
       brigadeIds.length > 0 &&
@@ -225,7 +249,8 @@ export default function TaskForm({
     return () => {
       cancelled = true;
     };
-  }, [form.executorType, form.brigadeId, form.secondBrigadeId, form.dateFrom, form.dateTo, initial?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.executorType, selectedBrigadeIds.join(","), form.dateFrom, form.dateTo, initial?.id]);
 
   const dateRangeInvalid = !!form.dateFrom && !!form.dateTo && form.dateTo < form.dateFrom;
 
@@ -237,10 +262,10 @@ export default function TaskForm({
     }
     startTransition(async () => {
       const payload: TaskInput = {
+        requestId: initial?.requestId,
         taskType: form.taskType,
         executorType: form.executorType,
-        brigadeId: form.executorType === "BRIGADE" ? form.brigadeId : null,
-        secondBrigadeId: form.executorType === "BRIGADE" ? form.secondBrigadeId || null : null,
+        assigneeIds: form.executorType === "BRIGADE" ? form.assigneeIds : [],
         outsourceName: form.executorType === "OUTSOURCE" ? form.outsourceName : null,
         clientId: form.clientId,
         machineIds: form.machineIds,
@@ -268,8 +293,11 @@ export default function TaskForm({
     });
   }
 
+  const hasLeader = staff.some(
+    (p) => form.assigneeIds.includes(p.id) && p.role === "BRIGADE_LEADER"
+  );
   const executorFilled =
-    form.executorType === "BRIGADE" ? !!form.brigadeId : !!form.outsourceName.trim();
+    form.executorType === "BRIGADE" ? hasLeader : !!form.outsourceName.trim();
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -307,44 +335,74 @@ export default function TaskForm({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {form.executorType === "BRIGADE" ? (
-          <>
-            <Field label={t("fields.brigade")}>
-              <select
-                className={inputCls}
-                value={form.brigadeId}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({
-                    ...f,
-                    brigadeId: v,
-                    secondBrigadeId: f.secondBrigadeId === v ? "" : f.secondBrigadeId,
-                  }));
-                }}
-              >
-                <option value="" disabled>—</option>
-                {brigades.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("fields.secondBrigade")}>
-              <select
-                className={inputCls}
-                value={form.secondBrigadeId}
-                onChange={(e) => set("secondBrigadeId", e.target.value)}
-              >
-                <option value="">{t("fields.noSecondBrigade")}</option>
-                {brigades
-                  .filter((b) => b.id !== form.brigadeId)
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+      {form.executorType === "BRIGADE" ? (
+        <div>
+          <span className="mb-1 block text-sm text-neutral-600">{t("fields.assignees")}</span>
+          <div className="space-y-2 rounded-lg border border-neutral-300 bg-white p-3">
+            {Array.from(
+              staff.reduce((acc, p) => {
+                const key = p.brigadeId ?? "—";
+                if (!acc.has(key)) acc.set(key, { name: p.brigadeName ?? "—", people: [] as StaffOption[] });
+                acc.get(key)!.people.push(p);
+                return acc;
+              }, new Map<string, { name: string; people: StaffOption[] }>())
+            ).map(([bid, group]) => {
+              const groupIds = group.people.map((p) => p.id);
+              const allSelected = groupIds.every((id) => form.assigneeIds.includes(id));
+              return (
+                <div key={bid} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      set(
+                        "assigneeIds",
+                        allSelected
+                          ? form.assigneeIds.filter((id) => !groupIds.includes(id))
+                          : Array.from(new Set([...form.assigneeIds, ...groupIds]))
+                      )
+                    }
+                    className={
+                      "rounded-md px-2 py-1 text-xs font-semibold transition " +
+                      (allSelected
+                        ? "bg-brand text-white"
+                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200")
+                    }
+                  >
+                    {group.name}
+                  </button>
+                  {group.people.map((p) => (
+                    <label key={p.id} className="flex cursor-pointer items-center gap-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[#009C4B]"
+                        checked={form.assigneeIds.includes(p.id)}
+                        onChange={(e) =>
+                          set(
+                            "assigneeIds",
+                            e.target.checked
+                              ? [...form.assigneeIds, p.id]
+                              : form.assigneeIds.filter((id) => id !== p.id)
+                          )
+                        }
+                      />
+                      <span className={p.role === "BRIGADE_LEADER" ? "font-semibold" : ""}>
+                        {p.name}
+                      </span>
+                      {p.role === "BRIGADE_LEADER" && (
+                        <span className="text-xs text-neutral-400">{t("fields.leaderTag")}</span>
+                      )}
+                    </label>
                   ))}
-              </select>
-            </Field>
-          </>
-        ) : (
+                </div>
+              );
+            })}
+          </div>
+          {form.assigneeIds.length > 0 && !hasLeader && (
+            <p className="mt-1 text-xs font-medium text-brand-orange">{t("fields.leaderRequired")}</p>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("fields.outsourceName")}>
             <input
               className={inputCls}
@@ -352,8 +410,8 @@ export default function TaskForm({
               onChange={(e) => set("outsourceName", e.target.value)}
             />
           </Field>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -369,13 +427,22 @@ export default function TaskForm({
               </button>
             )}
           </div>
+          <input
+            className={inputCls + " mb-1.5"}
+            placeholder={t("fields.clientSearch")}
+            value={clientQuery}
+            onChange={(e) => setClientQuery(e.target.value)}
+          />
           <select
             className={inputCls}
             value={form.clientId}
             onChange={(e) => onClientChange(e.target.value)}
           >
             <option value="" disabled>—</option>
-            {clients.map((c) => (
+            {selectedClient && !filteredClients.some((c) => c.id === selectedClient.id) && (
+              <option value={selectedClient.id}>{selectedClient.name}</option>
+            )}
+            {filteredClients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
@@ -441,6 +508,15 @@ export default function TaskForm({
                 value={qm.serialNumber}
                 onChange={(e) => setQm({ ...qm, serialNumber: e.target.value })}
               />
+              <select
+                className={inputCls}
+                value={qm.warrantyMonths}
+                onChange={(e) => setQm({ ...qm, warrantyMonths: Number(e.target.value) })}
+              >
+                {WARRANTY_OPTIONS.map((m) => (
+                  <option key={m} value={m}>{t("fields.machineWarranty", { months: m })}</option>
+                ))}
+              </select>
               <button
                 type="button"
                 className={btnPrimary}

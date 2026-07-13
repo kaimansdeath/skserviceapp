@@ -6,19 +6,21 @@ import { Link } from "@/i18n/routing";
 import BrigadeAddForm from "@/components/brigades/BrigadeAddForm";
 import BrigadeRowActions from "@/components/brigades/BrigadeRowActions";
 import UserRowActions from "@/components/brigades/UserRowActions";
+import RenameButton from "@/components/brigades/RenameButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function BrigadesPage({ params }: { params: { locale: string } }) {
   const t = await getTranslations();
   const session = (await auth())!;
-  if (session.user.role === "BRIGADE_LEADER" || session.user.role === "ACCOUNTANT")
+  if (session.user.role === "STOREKEEPER") redirect("/tools");
+  if (["BRIGADE_LEADER", "BRIGADE_MEMBER", "ACCOUNTANT"].includes(session.user.role))
     redirect(`/${params.locale}`);
   const isAdmin = session.user.role === "ADMIN";
 
   const [brigades, users] = await Promise.all([
     prisma.brigade.findMany({
-      include: { users: { where: { role: "BRIGADE_LEADER" } } },
+      include: { users: { where: { role: { in: ["BRIGADE_LEADER", "BRIGADE_MEMBER"] } } } },
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
@@ -44,8 +46,17 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
             <tbody>
               {brigades.map((b: any) => (
                 <tr key={b.id} className="border-b border-neutral-100 last:border-0">
-                  <td className="px-3 py-2 font-medium">{b.name}</td>
-                  <td className="px-3 py-2">{b.users.map((u: any) => u.name).join(", ") || "—"}</td>
+                  <td className="px-3 py-2 font-medium">
+                    {b.name}
+                    {isAdmin && <RenameButton kind="brigade" id={b.id} currentName={b.name} />}
+                  </td>
+                  <td className="px-3 py-2">
+                    {b.users
+                      .map((u: any) =>
+                        u.role === "BRIGADE_LEADER" ? `${u.name} ⭐` : u.name
+                      )
+                      .join(", ") || "—"}
+                  </td>
                   <td className="px-3 py-2">
                     <span
                       className={
@@ -107,6 +118,7 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
                 >
                   <td className="px-3 py-2 font-medium">
                     {u.name}
+                    {isAdmin && <RenameButton kind="user" id={u.id} currentName={u.name} />}
                     {!u.isActive && (
                       <span className="ml-2 text-xs text-neutral-400">({t("brigades.userInactive")})</span>
                     )}
@@ -115,7 +127,7 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
                   <td className="px-3 py-2">{t(`roles.${u.role}` as any)}</td>
                   <td className="px-3 py-2">{u.brigade?.name ?? "—"}</td>
                   <td className="px-3 py-2">
-                    {u.role === "BRIGADE_LEADER" || u.role === "ADMIN" ? (
+                    {["BRIGADE_LEADER", "BRIGADE_MEMBER", "ADMIN", "STOREKEEPER"].includes(u.role) ? (
                       <span
                         className={
                           "rounded-full px-2 py-0.5 text-xs font-semibold " +
@@ -135,7 +147,7 @@ export default async function BrigadesPage({ params }: { params: { locale: strin
                       <UserRowActions
                         userId={u.id}
                         isActive={u.isActive}
-                        canLinkTg={u.role === "BRIGADE_LEADER" || u.role === "ADMIN"}
+                        canLinkTg={["BRIGADE_LEADER", "BRIGADE_MEMBER", "ADMIN", "STOREKEEPER"].includes(u.role)}
                         isSelf={u.id === session.user.id}
                       />
                     </td>

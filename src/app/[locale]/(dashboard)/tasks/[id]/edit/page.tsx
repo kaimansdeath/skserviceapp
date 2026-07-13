@@ -17,13 +17,20 @@ export default async function EditTaskPage({
   if (session.user.role !== "ADMIN") redirect(`/${params.locale}/tasks/${params.id}`);
 
   const locale = await getLocale();
-  const [task, clients, brigades, machineTypes] = await Promise.all([
-    prisma.task.findUnique({ where: { id: params.id }, include: { machines: true } }),
+  const [task, clients, staff, machineTypes] = await Promise.all([
+    prisma.task.findUnique({
+      where: { id: params.id },
+      include: { machines: true, assignees: { select: { id: true } } },
+    }),
     prisma.client.findMany({
       include: { machines: true, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
     }),
-    prisma.brigade.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { role: { in: ["BRIGADE_LEADER", "BRIGADE_MEMBER"] }, isActive: true },
+      include: { brigade: true },
+      orderBy: [{ brigadeId: "asc" }, { role: "asc" }, { name: "asc" }],
+    }),
     prisma.machineType.findMany({ orderBy: { nameUk: "asc" } }),
   ]);
   if (!task) notFound();
@@ -44,7 +51,13 @@ export default async function EditTaskPage({
           })),
           invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
-        brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        staff={staff.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          brigadeId: u.brigadeId,
+          brigadeName: u.brigade?.name ?? null,
+        }))}
         machineTypes={machineTypes.map((tp: any) => ({
           id: tp.id,
           name: locale === "ru" ? tp.nameRu : tp.nameUk,
@@ -53,8 +66,7 @@ export default async function EditTaskPage({
           id: task.id,
           taskType: task.taskType as any,
           executorType: task.executorType as any,
-          brigadeId: task.brigadeId,
-          secondBrigadeId: task.secondBrigadeId,
+          assigneeIds: task.assignees.map((a: any) => a.id),
           outsourceName: task.outsourceName,
           orderNumber: task.orderNumber,
           clientId: task.clientId,

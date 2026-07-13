@@ -1,9 +1,11 @@
 import { getTranslations } from "next-intl/server";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formatDateUa, isOverdue, isToday, dateFieldFromYmd, archiveCutoff } from "@/lib/dates";
+import { formatDateUa, isOverdue, isToday, dateFieldFromYmd } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
 import StatusBadge from "@/components/ui/StatusBadge";
+import StatusQuickChange from "@/components/tasks/StatusQuickChange";
 import TaskFilters from "@/components/tasks/TaskFilters";
 
 export const dynamic = "force-dynamic";
@@ -22,22 +24,28 @@ export default async function TasksPage({
 }) {
   const t = await getTranslations();
   const session = (await auth())!;
+  if (session.user.role === "STOREKEEPER") redirect("/tools");
   const isBrigadier = session.user.role === "BRIGADE_LEADER";
-  const brigadeFilter = isBrigadier ? session.user.brigadeId : searchParams.brigade || undefined;
+  const isMember = session.user.role === "BRIGADE_MEMBER";
+  const isField = isBrigadier || isMember;
+  const brigadeFilter = isField ? null : searchParams.brigade || undefined;
 
   const [brigades, managers, tasks] = await Promise.all([
     prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.manager.findMany({ orderBy: { name: "asc" } }),
     prisma.task.findMany({
       where: {
-        // архівні (Виконано понад 14 днів тому) — у розділі «Архів»;
+        // «Виконано» одразу переходить в Архів;
         // Не виконано / Виконано не повністю залишаються в пулі задач
-        NOT: {
-          AND: [{ status: "DONE" }, { dateTo: { lt: archiveCutoff() } }],
-        },
-        ...(brigadeFilter
-          ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
-          : {}),
+        NOT: { status: "DONE" },
+        ...(isField
+          ? {
+              assignees: { some: { id: session.user.id } },
+              ...(isMember ? { status: { not: "ASSIGNED" } } : {}),
+            }
+          : brigadeFilter
+            ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
+            : {}),
         ...(searchParams.status ? { status: searchParams.status as any } : {}),
         ...(searchParams.city
           ? { city: { contains: searchParams.city, mode: "insensitive" } }
@@ -46,7 +54,14 @@ export default async function TasksPage({
         ...(searchParams.from ? { dateTo: { gte: dateFieldFromYmd(searchParams.from) } } : {}),
         ...(searchParams.to ? { dateFrom: { lte: dateFieldFromYmd(searchParams.to) } } : {}),
       },
-      include: { brigade: true, secondBrigade: true, client: true, machines: true, invoice: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        machines: true,
+        invoice: true,
+        assignees: { select: { id: true, name: true, role: true } },
+      },
       orderBy: [{ dateFrom: "desc" }],
       take: 200,
     }),
@@ -69,7 +84,7 @@ export default async function TasksPage({
       <TaskFilters
         brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
         managers={managers.map((m: any) => ({ id: m.id, name: m.name }))}
-        lockBrigade={isBrigadier ? session.user.brigadeId : null}
+        lockBrigade={isField ? session.user.brigadeId ?? "self" : null}
       />
 
       <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
@@ -106,17 +121,18 @@ export default async function TasksPage({
                   }
                 >
                   <td className="whitespace-nowrap px-3 py-2">
-                    <Link href={`/tasks/${task.id}`} className="font-medium text-brand-dark hover:underline">
+                    <Link
+                      href={`/tasks/${task.id}`}
+                      className={
+                        "text-brand-dark hover:underline " +
+                        (todayTask ? "font-extrabold" : "font-medium")
+                      }
+                    >
                       {formatDateUa(task.dateFrom)} — {formatDateUa(task.dateTo)}
                     </Link>
                     {overdue && (
                       <span className="ml-2 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
                         {t("tasks.overdueBadge")}
-                      </span>
-                    )}
-                    {todayTask && (
-                      <span className="ml-2 rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
-                        {t("tasks.todayBadge")}
                       </span>
                     )}
                   </td>
@@ -130,8 +146,9 @@ export default async function TasksPage({
                       </span>
                     ) : (
                       <>
-                        {task.brigade?.name ?? "—"}
-                        {task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}
+                        {task.assignees.length > 0
+                          ? task.assignees.map((a: any) => a.name).join(", ")
+                          : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
                       </>
                     )}
                   </td>
@@ -143,7 +160,19 @@ export default async function TasksPage({
                       : "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">{task.invoice?.number ?? "—"}</td>
-                  <td className="px-3 py-2"><StatusBadge status={task.status} /></td>
+                  <td className="px-3 py-2">
+                    {session.user.role === "ADMIN" ||
+                    (isBrigadier &&
+                      task.assignees.some((a: any) => a.id === session.user.id)) ? (
+                      <StatusQuickChange
+                        taskId={task.id}
+                        current={task.status}
+                        role={session.user.role}
+                      />
+                    ) : (
+                      <StatusBadge status={task.status} />
+                    )}
+                  </td>
                 </tr>
               );
             })}

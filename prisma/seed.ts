@@ -118,6 +118,41 @@ async function main() {
   });
 
   await prisma.user.upsert({
+    where: { login: "korobka" },
+    update: {},
+    create: {
+      name: "Коробка",
+      login: "korobka",
+      passwordHash: hash(BRIGADIER_PASSWORD),
+      role: Role.BRIGADE_MEMBER,
+      brigadeId: brigadeFliaga.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { login: "nazar" },
+    update: {},
+    create: {
+      name: "Назар",
+      login: "nazar",
+      passwordHash: hash(BRIGADIER_PASSWORD),
+      role: Role.BRIGADE_MEMBER,
+      brigadeId: brigadeKyrylko.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { login: "sklad" },
+    update: {},
+    create: {
+      name: "Комірник",
+      login: "sklad",
+      passwordHash: hash("Sklad_2026!"),
+      role: Role.STOREKEEPER,
+    },
+  });
+
+  await prisma.user.upsert({
     where: { login: "kyrylko" },
     update: {},
     create: {
@@ -337,7 +372,7 @@ async function main() {
   }
 
   console.log("Seed завершено.");
-  console.log("Логіни: admin / director / accountant / flyaga / kyrylko");
+  console.log("Логіни: admin / director / accountant / sklad / flyaga / korobka / kyrylko / nazar");
 }
 
 main()

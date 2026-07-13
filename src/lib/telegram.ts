@@ -30,6 +30,42 @@ const T = {
     answerFrom: "💬 <b>Відповідь керівника</b>",
     commentFrom: "💬 <b>Коментар до задачі</b>",
     btnReply: "↩️ Відповісти",
+    reqBtn: "🛠 Запит на виїзд",
+    reqIntro:
+      "Це бот сервісної служби СТАН КОМПЛЕКТ.\n\nЯкщо ви клієнт і потрібен виїзд сервісного інженера — натисніть кнопку нижче.\nЯкщо ви співробітник — надішліть /start КОД (код видає керівник відділу).",
+    reqAskSerial: "Введіть серійний номер верстата з шильда одним повідомленням:",
+    reqNoSnBtn: "Залишити заявку без S/N",
+    reqSharePhone: "📱 Поділитися моїм номером",
+    reqFound: "✅ Верстат знайдено в базі:",
+    reqAskProblem: "Опишіть проблему одним повідомленням:",
+    reqNotFound:
+      "Верстат із таким серійним номером у базі не знайдено — оформимо заявку вручну.\n\nВкажіть тип верстата (наприклад: лазер, токарний з ЧПК, листозгин):",
+    reqAskModel: "Назва / модель верстата:",
+    reqAskName: "Ваше ім'я:",
+    reqAskPhone: "Контактний номер телефону:",
+    reqSaved:
+      "✅ Заявку прийнято! Керівник сервісної служби зв'яжеться з вами найближчим часом.",
+    reqAdminTitle: "🆕 <b>Заявка на виїзд</b>",
+    reqAccepted:
+      "✅ Ваша заявка прийнята в роботу — виїзд сервісної служби заплановано. Дякуємо за звернення!",
+    toolBuyAsk: "✍️ Опишіть, який інструмент потрібно закупити (назва, кількість, для чого):",
+    toolIssueAsk:
+      "✍️ Опишіть, який інструмент видати зі складу і кому (бригада чи конкретна людина):",
+    toolReqSaved: "📨 Заявку передано. Ви отримаєте повідомлення після її опрацювання.",
+    toolBuyTitle: "🛒 <b>Заявка на закупку інструменту</b>",
+    toolIssueTitle: "📦 <b>Заявка на видачу інструменту</b>",
+    toolReqDone: "✅ Вашу заявку опрацьовано:",
+    toolReqRejected: "❌ Вашу заявку відхилено:",
+    onlyLeaders: "Ця дія доступна лише бригадирам.",
+    reqLabels: {
+      sn: "S/N",
+      type: "Тип",
+      model: "Модель",
+      contact: "Контакт",
+      phone: "Телефон",
+      problem: "Проблема",
+    },
+
     questionNoAdmin:
       "Наразі керівник не підключений до Telegram — зателефонуйте йому напряму.",
     questionFrom: "❓ <b>Питання від бригадира</b>",
@@ -86,6 +122,42 @@ const T = {
     answerFrom: "💬 <b>Ответ руководителя</b>",
     commentFrom: "💬 <b>Комментарий к задаче</b>",
     btnReply: "↩️ Ответить",
+    reqBtn: "🛠 Заявка на выезд",
+    reqIntro:
+      "Это бот сервисной службы СТАН КОМПЛЕКТ.\n\nЕсли вы клиент и нужен выезд сервисного инженера — нажмите кнопку ниже.\nЕсли вы сотрудник — отправьте /start КОД (код выдаёт руководитель отдела).",
+    reqAskSerial: "Введите серийный номер станка с шильда одним сообщением:",
+    reqNoSnBtn: "Оставить заявку без S/N",
+    reqSharePhone: "📱 Поделиться моим номером",
+    reqFound: "✅ Станок найден в базе:",
+    reqAskProblem: "Опишите проблему одним сообщением:",
+    reqNotFound:
+      "Станок с таким серийным номером в базе не найден — оформим заявку вручную.\n\nУкажите тип станка (например: лазер, токарный с ЧПУ, листогиб):",
+    reqAskModel: "Название / модель станка:",
+    reqAskName: "Ваше имя:",
+    reqAskPhone: "Контактный номер телефона:",
+    reqSaved:
+      "✅ Заявка принята! Руководитель сервисной службы свяжется с вами в ближайшее время.",
+    reqAdminTitle: "🆕 <b>Заявка на выезд</b>",
+    reqAccepted:
+      "✅ Ваша заявка принята в работу — выезд сервисной службы запланирован. Спасибо за обращение!",
+    toolBuyAsk: "✍️ Опишіть, який інструмент потрібно закупити (назва, кількість, для чого):",
+    toolIssueAsk:
+      "✍️ Опишіть, який інструмент видати зі складу і кому (бригада чи конкретна людина):",
+    toolReqSaved: "📨 Заявку передано. Ви отримаєте повідомлення після її опрацювання.",
+    toolBuyTitle: "🛒 <b>Заявка на закупку інструменту</b>",
+    toolIssueTitle: "📦 <b>Заявка на видачу інструменту</b>",
+    toolReqDone: "✅ Вашу заявку опрацьовано:",
+    toolReqRejected: "❌ Вашу заявку відхилено:",
+    onlyLeaders: "Ця дія доступна лише бригадирам.",
+    reqLabels: {
+      sn: "S/N",
+      type: "Тип",
+      model: "Модель",
+      contact: "Контакт",
+      phone: "Телефон",
+      problem: "Проблема",
+    },
+
     questionNoAdmin:
       "Сейчас руководитель не подключён к Telegram — позвоните ему напрямую.",
     questionFrom: "❓ <b>Вопрос от бригадира</b>",
@@ -126,6 +198,10 @@ const T = {
 } as const;
 
 type Lang = keyof typeof T;
+
+function langFromCtx(ctx: any): Lang {
+  return String(ctx.from?.language_code ?? "").startsWith("ru") ? "ru" : "uk";
+}
 
 function langOf(user: { locale?: string | null }): Lang {
   return user.locale === "RU" ? "ru" : "uk";
@@ -246,10 +322,15 @@ function taskLine(lang: Lang, task: any): string {
   )} · ${statusLabel(lang, task.status)}`;
 }
 
-/** Умова "задачі бригадира" (основна або друга бригада) */
-function brigadeWhere(user: any) {
-  if (user.role === "BRIGADE_LEADER" && user.brigadeId) {
-    return { OR: [{ brigadeId: user.brigadeId }, { secondBrigadeId: user.brigadeId }] };
+/** Умова видимості задач для польового персоналу */
+function assigneeWhere(user: any) {
+  if (user.role === "BRIGADE_LEADER" || user.role === "BRIGADE_MEMBER") {
+    const base: any = { assignees: { some: { id: user.id } } };
+    // працівник бачить задачу лише ПІСЛЯ підтвердження бригадиром
+    if (user.role === "BRIGADE_MEMBER") {
+      return { AND: [base, { status: { not: "ASSIGNED" } }] };
+    }
+    return base;
   }
   return {};
 }
@@ -269,18 +350,17 @@ export async function notifyTaskAssigned(taskId: string): Promise<void> {
       client: true,
       machines: true,
       invoice: true,
-      brigade: { include: { users: { where: { role: "BRIGADE_LEADER", isActive: true } } } },
-      secondBrigade: {
-        include: { users: { where: { role: "BRIGADE_LEADER", isActive: true } } },
-      },
+      brigade: true,
+      secondBrigade: true,
+      assignees: { where: { isActive: true } },
     },
   });
   if (!task || task.executorType === "OUTSOURCE") return;
 
-  const recipients = [
-    ...(task.brigade?.users ?? []),
-    ...(task.secondBrigade?.users ?? []),
-  ].filter((u: any) => u.telegramChatId);
+  // запит на підтвердження — ТІЛЬКИ бригадирам серед призначених
+  const recipients = (task as any).assignees.filter(
+    (u: any) => u.role === "BRIGADE_LEADER" && u.telegramChatId
+  );
 
   for (const user of recipients) {
     const lang = langOf(user);
@@ -373,6 +453,222 @@ async function userByChat(chatId: string) {
   return prisma.user.findUnique({ where: { telegramChatId: chatId } });
 }
 
+/** Меню команд для конкретного чату — залежить від ролі */
+export async function setChatMenu(chatId: string, role: string) {
+  const bot = getBot();
+  if (!bot) return;
+  let cmds: { command: string; description: string }[];
+  if (role === "BRIGADE_LEADER") {
+    cmds = [
+      { command: "current", description: "Поточна задача" },
+      { command: "tasks", description: "Мої задачі" },
+      { command: "archive", description: "Архів задач" },
+      { command: "toolbuy", description: "Заявка на закупку інструменту" },
+      { command: "toolissue", description: "Заявка на видачу інструменту" },
+    ];
+  } else if (role === "BRIGADE_MEMBER") {
+    cmds = [
+      { command: "current", description: "Поточна задача" },
+      { command: "tasks", description: "Мої задачі" },
+      { command: "archive", description: "Архів задач" },
+    ];
+  } else {
+    cmds = [
+      { command: "current", description: "Поточна задача" },
+      { command: "tasks", description: "Задачі" },
+      { command: "archive", description: "Архів задач" },
+      { command: "request", description: "Запит на виїзд" },
+    ];
+  }
+  await bot.api
+    .setMyCommands(cmds, { scope: { type: "chat", chat_id: Number(chatId) } })
+    .catch(() => {});
+}
+
+/** Сповіщення бригадиру про результат заявки на інструмент */
+export async function notifyToolRequestResolved(requestId: string, status: "DONE" | "REJECTED") {
+  const bot = getBot();
+  if (!bot) return;
+  const req = await prisma.toolRequest.findUnique({
+    where: { id: requestId },
+    include: { requestedBy: true },
+  });
+  const chat = (req as any)?.requestedBy?.telegramChatId;
+  if (!req || !chat) return;
+  const lang = langOf((req as any).requestedBy);
+  const head = status === "DONE" ? T[lang].toolReqDone : T[lang].toolReqRejected;
+  await bot.api
+    .sendMessage(chat, `${head}\n${esc(req.text)}`, { parse_mode: "HTML" })
+    .catch(() => {});
+}
+
+async function notifyToolRequest(requestId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const req = await prisma.toolRequest.findUnique({
+    where: { id: requestId },
+    include: { requestedBy: true },
+  });
+  if (!req) return;
+  const roles = req.kind === "PURCHASE" ? ["ADMIN"] : ["ADMIN", "STOREKEEPER"];
+  const recipients = await prisma.user.findMany({
+    where: { role: { in: roles as any }, isActive: true, telegramChatId: { not: null } },
+  });
+  const base = (process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
+  const tab = req.kind === "PURCHASE" ? "purchase" : "warehouse";
+  for (const r of recipients) {
+    const lang = langOf(r);
+    const title = req.kind === "PURCHASE" ? T[lang].toolBuyTitle : T[lang].toolIssueTitle;
+    const lines: string[] = [title, `<b>${esc((req as any).requestedBy?.name ?? "—")}</b>`, "", esc(req.text)];
+    if (base) lines.push(`\n${base}/${lang}/tools?tab=${tab}`);
+    await bot.api
+      .sendMessage(r.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
+      .catch(() => {});
+  }
+}
+
+function requestIntroKeyboard(lang: Lang): InlineKeyboard {
+  return new InlineKeyboard().text(T[lang].reqBtn, "req:new");
+}
+
+async function startRequestDialog(ctx: any, lang: Lang) {
+  const chatId = String(ctx.chat!.id);
+  await prisma.botDialog.upsert({
+    where: { chatId },
+    update: { state: JSON.stringify({ flow: "request", step: "serial", lang, data: {} }) },
+    create: { chatId, state: JSON.stringify({ flow: "request", step: "serial", lang, data: {} }) },
+  });
+  await ctx.reply(T[lang].reqAskSerial, {
+    reply_markup: new InlineKeyboard().text(T[lang].reqNoSnBtn, "req:nosn"),
+  });
+}
+
+async function notifyAdminsNewRequest(requestId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const [req, admins] = await Promise.all([
+    prisma.serviceRequest.findUnique({
+      where: { id: requestId },
+      include: { machine: { include: { type: true } }, client: true },
+    }),
+    prisma.user.findMany({
+      where: { role: "ADMIN", isActive: true, telegramChatId: { not: null } },
+    }),
+  ]);
+  if (!req) return;
+  const base = (process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
+  for (const admin of admins) {
+    const lang = langOf(admin);
+    const L = T[lang].reqLabels;
+    const lines: string[] = [T[lang].reqAdminTitle];
+    if ((req as any).machine) {
+      lines.push(`<b>${L.model}:</b> ${esc((req as any).machine.model)}`);
+      lines.push(`<b>${L.sn}:</b> ${esc(req.serialNumber)}`);
+      if ((req as any).client) lines.push(`<b>Клієнт:</b> ${esc((req as any).client.name)}, ${esc((req as any).client.city)}`);
+    } else {
+      lines.push(`<b>${L.sn}:</b> ${esc(req.serialNumber)}`);
+      if (req.machineTypeText) lines.push(`<b>${L.type}:</b> ${esc(req.machineTypeText)}`);
+      if (req.modelText) lines.push(`<b>${L.model}:</b> ${esc(req.modelText)}`);
+      if (req.contactName) lines.push(`<b>${L.contact}:</b> ${esc(req.contactName)}`);
+      if (req.contactPhone) lines.push(`<b>${L.phone}:</b> ${esc(req.contactPhone)}`);
+    }
+    lines.push(`<b>${L.problem}:</b> ${esc(req.problem)}`);
+    if (base) lines.push(`\n${base}/${lang}/requests`);
+    await bot.api
+      .sendMessage(admin.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
+      .catch(() => {});
+  }
+}
+
+/** Сповіщення заявнику: заявку взято в роботу (створено задачу) */
+export async function notifyRequesterAccepted(requestId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const req = await prisma.serviceRequest.findUnique({ where: { id: requestId } });
+  if (!req?.chatId) return;
+  await bot.api.sendMessage(req.chatId, T.uk.reqAccepted + "\n\n" + T.ru.reqAccepted).catch(() => {});
+}
+
+async function handleRequestDialog(ctx: any, dialogState: any) {
+  const chatId = String(ctx.chat.id);
+  const lang: Lang = dialogState.lang === "ru" ? "ru" : "uk";
+  const text = String(ctx.message.text).trim();
+  const data = dialogState.data ?? {};
+
+  const save = (step: string, extra: Record<string, unknown>) =>
+    prisma.botDialog.update({
+      where: { chatId },
+      data: {
+        state: JSON.stringify({ flow: "request", step, lang, data: { ...data, ...extra } }),
+      },
+    });
+
+  switch (dialogState.step) {
+    case "serial": {
+      const machine = await prisma.machine.findFirst({
+        where: { serialNumber: { equals: text, mode: "insensitive" } },
+        include: { client: true, type: true },
+      });
+      if (machine) {
+        await save("problem", { serial: text, machineId: machine.id, clientId: machine.clientId });
+        await ctx.reply(
+          `${T[lang].reqFound}\n<b>${esc((machine as any).model)}</b> — ${esc(
+            (machine as any).client.name
+          )}, ${esc((machine as any).client.city)}\n\n${T[lang].reqAskProblem}`,
+          { parse_mode: "HTML" }
+        );
+      } else {
+        await save("typeText", { serial: text });
+        await ctx.reply(T[lang].reqNotFound);
+      }
+      return;
+    }
+    case "typeText":
+      await save("modelText", { typeText: text });
+      await ctx.reply(T[lang].reqAskModel);
+      return;
+    case "modelText":
+      await save("contactName", { modelText: text });
+      await ctx.reply(T[lang].reqAskName);
+      return;
+    case "contactName":
+      await save("contactPhone", { contactName: text });
+      await ctx.reply(T[lang].reqAskPhone, {
+        reply_markup: {
+          keyboard: [[{ text: T[lang].reqSharePhone, request_contact: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      });
+      return;
+    case "contactPhone":
+      await save("problem", { contactPhone: text });
+      await ctx.reply(T[lang].reqAskProblem, { reply_markup: { remove_keyboard: true } });
+      return;
+    case "problem": {
+      const req = await prisma.serviceRequest.create({
+        data: {
+          chatId,
+          serialNumber: data.serial ?? "",
+          machineId: data.machineId ?? null,
+          clientId: data.clientId ?? null,
+          machineTypeText: data.typeText ?? null,
+          modelText: data.modelText ?? null,
+          contactName: data.contactName ?? null,
+          contactPhone: data.contactPhone ?? null,
+          problem: text,
+        },
+      });
+      await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+      await ctx.reply(T[lang].reqSaved);
+      notifyAdminsNewRequest(req.id).catch(() => {});
+      return;
+    }
+    default:
+      await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+  }
+}
+
 function registerHandlers(bot: Bot) {
   // /start [код]
   bot.command("start", async (ctx) => {
@@ -380,10 +676,16 @@ function registerHandlers(bot: Bot) {
     const code = (ctx.match ?? "").trim().toUpperCase();
 
     const existing = await userByChat(chatId);
+    await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
 
     if (!code) {
-      const lang = existing ? langOf(existing) : "uk";
-      await ctx.reply(existing ? T[lang].alreadyLinked : T[lang].needCode);
+      if (existing) {
+        await setChatMenu(chatId, existing.role);
+        await ctx.reply(T[langOf(existing)].alreadyLinked);
+      } else {
+        const lang = langFromCtx(ctx);
+        await ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+      }
       return;
     }
 
@@ -405,6 +707,7 @@ function registerHandlers(bot: Bot) {
       where: { id: user.id },
       data: { telegramChatId: chatId, tgLinkCode: null, tgLinkExpires: null },
     });
+    await setChatMenu(chatId, user.role);
     await ctx.reply(T[langOf(user)].linked);
   });
 
@@ -433,6 +736,7 @@ function registerHandlers(bot: Bot) {
       return ctx.answerCallbackQuery();
     }
     await ctx.answerCallbackQuery({ text: T[lang].saved });
+    notifyMembersConfirmed(taskId).catch(() => {});
     const withContacts = await prisma.task.findUnique({
       where: { id: taskId },
       include: { client: { include: { contacts: true } } },
@@ -522,15 +826,78 @@ function registerHandlers(bot: Bot) {
     await ctx.reply(T[lang].answerAsk);
   });
 
+  // Заявка на виїзд: команда та кнопка (доступно всім, включно з неавторизованими)
+  bot.command("request", async (ctx) => {
+    const user = await userByChat(String(ctx.chat.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await startRequestDialog(ctx, lang);
+  });
+
+  bot.callbackQuery("req:new", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await startRequestDialog(ctx, lang);
+  });
+
+  // заявка без серійного номера — одразу до ручного опису
+  bot.callbackQuery("req:nosn", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const chatId = String(ctx.chat!.id);
+    const dialog = await prisma.botDialog.findUnique({ where: { chatId } });
+    let lang: Lang = langFromCtx(ctx);
+    try {
+      const st = dialog ? JSON.parse(dialog.state) : null;
+      if (st?.lang) lang = st.lang;
+    } catch {}
+    await prisma.botDialog.upsert({
+      where: { chatId },
+      update: {
+        state: JSON.stringify({ flow: "request", step: "typeText", lang, data: { serial: "" } }),
+      },
+      create: {
+        chatId,
+        state: JSON.stringify({ flow: "request", step: "typeText", lang, data: { serial: "" } }),
+      },
+    });
+    await ctx.reply(T[lang].reqNotFound);
+  });
+
+  // Заявки на інструмент (лише бригадири)
+  for (const [cmd, kind] of [
+    ["toolbuy", "PURCHASE"],
+    ["toolissue", "ISSUE"],
+  ] as const) {
+    bot.command(cmd, async (ctx) => {
+      const user = await userByChat(String(ctx.chat.id));
+      if (!user) {
+        const lang = langFromCtx(ctx);
+        return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+      }
+      const lang = langOf(user);
+      if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+        return ctx.reply(T[lang].onlyLeaders);
+      }
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { tgPendingAction: JSON.stringify({ type: "toolreq", kind }) },
+      });
+      await ctx.reply(kind === "PURCHASE" ? T[lang].toolBuyAsk : T[lang].toolIssueAsk);
+    });
+  }
+
   // Меню: /tasks — актуальні та майбутні
   bot.command("tasks", async (ctx) => {
     const user = await userByChat(String(ctx.chat.id));
-    if (!user) return ctx.reply(T.uk.notLinked);
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+    }
     const lang = langOf(user);
     const tasks = await prisma.task.findMany({
       where: {
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-        ...brigadeWhere(user),
+        ...assigneeWhere(user),
       },
       include: { client: true },
       orderBy: { dateFrom: "asc" },
@@ -545,12 +912,15 @@ function registerHandlers(bot: Bot) {
   // Меню: /archive — завершені задачі бригадира
   bot.command("archive", async (ctx) => {
     const user = await userByChat(String(ctx.chat.id));
-    if (!user) return ctx.reply(T.uk.notLinked);
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+    }
     const lang = langOf(user);
     const tasks = await prisma.task.findMany({
       where: {
         status: { in: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-        ...brigadeWhere(user),
+        ...assigneeWhere(user),
       },
       include: { client: true },
       orderBy: { dateTo: "desc" },
@@ -566,7 +936,10 @@ function registerHandlers(bot: Bot) {
   // Меню: /current — поточна задача (картка + кнопки статусів)
   bot.command("current", async (ctx) => {
     const user = await userByChat(String(ctx.chat.id));
-    if (!user) return ctx.reply(T.uk.notLinked);
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+    }
     const lang = langOf(user);
     const today = kyivToday();
 
@@ -584,7 +957,7 @@ function registerHandlers(bot: Bot) {
         status: { in: ["EN_ROUTE", "ON_SITE"] },
         dateFrom: { lte: today },
         dateTo: { gte: today },
-        ...brigadeWhere(user),
+        ...assigneeWhere(user),
       },
       include: includeFull,
       orderBy: { dateTo: "asc" },
@@ -596,7 +969,7 @@ function registerHandlers(bot: Bot) {
         where: {
           status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
           dateTo: { gte: today },
-          ...brigadeWhere(user),
+          ...assigneeWhere(user),
         },
         include: includeFull,
         orderBy: { dateFrom: "asc" },
@@ -605,13 +978,15 @@ function registerHandlers(bot: Bot) {
     }
     if (tasks.length === 0) return ctx.reply(T[lang].noCurrent);
 
+    const isMember = user.role === "BRIGADE_MEMBER";
     for (const task of tasks) {
       await ctx.reply(
         `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
         {
           parse_mode: "HTML",
-          reply_markup:
-            task.status === "ASSIGNED"
+          reply_markup: isMember
+            ? undefined
+            : task.status === "ASSIGNED"
               ? acceptKeyboard(lang, task.id)
               : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
         }
@@ -619,11 +994,52 @@ function registerHandlers(bot: Bot) {
     }
   });
 
-  // Текстові повідомлення: причина або питання
+  // Поділитися контактом (кнопка на кроці телефону в заявці)
+  bot.on("message:contact", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    const dialog = await prisma.botDialog.findUnique({ where: { chatId } });
+    if (!dialog) return;
+    let st: any = null;
+    try {
+      st = JSON.parse(dialog.state);
+    } catch {}
+    if (st?.flow !== "request" || st?.step !== "contactPhone") return;
+    const lang: Lang = st.lang === "ru" ? "ru" : "uk";
+    const phone = ctx.message.contact.phone_number;
+    await prisma.botDialog.update({
+      where: { chatId },
+      data: {
+        state: JSON.stringify({
+          flow: "request",
+          step: "problem",
+          lang,
+          data: { ...(st.data ?? {}), contactPhone: phone },
+        }),
+      },
+    });
+    await ctx.reply(T[lang].reqAskProblem, { reply_markup: { remove_keyboard: true } });
+  });
+
+  // Текстові повідомлення: діалог заявки / причина / питання / відповідь
   bot.on("message:text", async (ctx) => {
     const chatId = String(ctx.chat.id);
+
+    // покроковий діалог заявки має пріоритет
+    const dialog = await prisma.botDialog.findUnique({ where: { chatId } });
+    if (dialog) {
+      let st: any = null;
+      try {
+        st = JSON.parse(dialog.state);
+      } catch {}
+      if (st?.flow === "request") return handleRequestDialog(ctx, st);
+      await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+    }
+
     const user = await userByChat(chatId);
-    if (!user) return ctx.reply(T.uk.notLinked);
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+    }
     const lang = langOf(user);
 
     if (!user.tgPendingAction) return ctx.reply(T[lang].unknown);
@@ -649,6 +1065,15 @@ function registerHandlers(bot: Bot) {
       });
       if ("error" in res) return ctx.reply(T[lang].noPermission);
       await ctx.reply(`${T[lang].statusSet} ${statusLabel(lang, pending.status)}`);
+      return;
+    }
+
+    if (pending.type === "toolreq") {
+      const req = await prisma.toolRequest.create({
+        data: { kind: pending.kind, text, requestedById: user.id },
+      });
+      await ctx.reply(T[lang].toolReqSaved);
+      notifyToolRequest(req.id).catch(() => {});
       return;
     }
 
@@ -762,6 +1187,38 @@ export async function notifyTaskComment(taskId: string, authorId: string, text: 
         `${T[lang].commentFrom}\n<b>${esc(author.name)}</b>\n<b>${f.task}:</b> ${esc(
           task.client.name
         )}, ${esc(task.city)}\n\n${esc(text)}`,
+        { parse_mode: "HTML" }
+      )
+      .catch(() => {});
+  }
+}
+
+/**
+ * Після підтвердження задачі бригадиром — інформаційна картка
+ * працівникам бригади (без кнопок: статуси змінює лише бригадир).
+ */
+export async function notifyMembersConfirmed(taskId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: {
+      client: { include: { contacts: true } },
+      machines: true,
+      invoice: true,
+      brigade: true,
+      secondBrigade: true,
+      assignees: { where: { isActive: true, role: "BRIGADE_MEMBER" } },
+    },
+  });
+  if (!task) return;
+  for (const member of (task as any).assignees) {
+    if (!member.telegramChatId) continue;
+    const lang = langOf(member);
+    await bot.api
+      .sendMessage(
+        member.telegramChatId,
+        `${taskCard(lang, task)}\n\n${contactsBlock(lang, (task as any).client.contacts)}`,
         { parse_mode: "HTML" }
       )
       .catch(() => {});

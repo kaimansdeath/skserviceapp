@@ -28,7 +28,7 @@ const userInput = z.object({
     .min(3)
     .regex(/^[a-z0-9_.-]+$/i),
   password: z.string().min(8),
-  role: z.enum(["ADMIN", "BRIGADE_LEADER", "VIEWER", "ACCOUNTANT"]),
+  role: z.enum(["ADMIN", "BRIGADE_LEADER", "BRIGADE_MEMBER", "STOREKEEPER", "VIEWER", "ACCOUNTANT"]),
   brigadeId: z.string().optional().nullable(),
 });
 
@@ -45,7 +45,9 @@ export async function createUser(input: z.infer<typeof userInput>) {
       login: data.login.trim().toLowerCase(),
       passwordHash: bcrypt.hashSync(data.password, 10),
       role: data.role,
-      brigadeId: data.role === "BRIGADE_LEADER" ? data.brigadeId || null : null,
+      brigadeId: ["BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(data.role)
+        ? data.brigadeId || null
+        : null,
     },
   });
   revalidatePath("/", "layout");
@@ -85,4 +87,22 @@ export async function generateTgCode(userId: string) {
   });
   revalidatePath("/", "layout");
   return { ok: true as const, code };
+}
+
+/** Перейменування бригади */
+export async function renameBrigade(id: string, name: string) {
+  await requireAdmin();
+  if (!name.trim()) return { error: "EMPTY" as const };
+  await prisma.brigade.update({ where: { id }, data: { name: name.trim() } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/** Перейменування користувача */
+export async function renameUser(id: string, name: string) {
+  await requireAdmin();
+  if (!name.trim()) return { error: "EMPTY" as const };
+  await prisma.user.update({ where: { id }, data: { name: name.trim() } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
 }

@@ -1,7 +1,8 @@
 import { getTranslations } from "next-intl/server";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formatDateUa, dateFieldFromYmd, archiveCutoff } from "@/lib/dates";
+import { formatDateUa, dateFieldFromYmd } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
 import ArchiveFilters from "@/components/archive/ArchiveFilters";
 
@@ -18,8 +19,9 @@ export default async function ArchivePage({
 }) {
   const t = await getTranslations();
   const session = (await auth())!;
-  const isBrigadier = session.user.role === "BRIGADE_LEADER";
-  const brigadeFilter = isBrigadier ? session.user.brigadeId : searchParams.brigade || undefined;
+  if (session.user.role === "STOREKEEPER") redirect("/tools");
+  const isField = ["BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(session.user.role);
+  const brigadeFilter = isField ? null : searchParams.brigade || undefined;
   const q = searchParams.q?.trim();
 
   const [brigades, tasks] = await Promise.all([
@@ -27,14 +29,13 @@ export default async function ArchivePage({
     prisma.task.findMany({
       where: {
         status: "DONE",
-        dateTo: {
-          lt: archiveCutoff(),
-          ...(searchParams.to ? { lte: dateFieldFromYmd(searchParams.to) } : {}),
-        },
+        ...(searchParams.to ? { dateTo: { lte: dateFieldFromYmd(searchParams.to) } } : {}),
         ...(searchParams.from ? { dateFrom: { gte: dateFieldFromYmd(searchParams.from) } } : {}),
-        ...(brigadeFilter
-          ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
-          : {}),
+        ...(isField
+          ? { assignees: { some: { id: session.user.id } } }
+          : brigadeFilter
+            ? { OR: [{ brigadeId: brigadeFilter }, { secondBrigadeId: brigadeFilter }] }
+            : {}),
         ...(q
           ? {
               OR: [

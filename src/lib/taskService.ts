@@ -15,10 +15,14 @@ export async function applyStatusChange(params: {
   actor: StatusActor;
   source: "WEB" | "TELEGRAM";
 }) {
-  const task = await prisma.task.findUnique({ where: { id: params.taskId } });
+  const task = await prisma.task.findUnique({
+    where: { id: params.taskId },
+    include: { assignees: { select: { id: true } } },
+  });
   if (!task) return { error: "NOT_FOUND" as const };
 
-  if (!canTouchTask({ user: params.actor } as any, task)) {
+  const assigneeIds = (task as any).assignees.map((a: any) => a.id);
+  if (!canTouchTask({ user: params.actor } as any, { ...task, assigneeIds })) {
     return { error: "FORBIDDEN" as const };
   }
 

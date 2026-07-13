@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { saveMachine } from "@/app/actions/clients";
+import { WARRANTY_OPTIONS } from "@/lib/warranty";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
 type Initial = {
@@ -11,6 +12,7 @@ type Initial = {
   typeId?: string;
   model?: string;
   serialNumber?: string | null;
+  warrantyMonths?: number;
   note?: string | null;
 };
 
@@ -33,6 +35,7 @@ export default function MachineForm({
     typeId: initial?.typeId ?? "",
     model: initial?.model ?? "",
     serialNumber: initial?.serialNumber ?? "",
+    warrantyMonths: initial?.warrantyMonths ?? 12,
     note: initial?.note ?? "",
   });
 
@@ -64,6 +67,17 @@ export default function MachineForm({
       </Field>
       <Field label={t("serial")}>
         <input className={inputCls} value={form.serialNumber} onChange={(e) => setForm({ ...form, serialNumber: e.target.value })} />
+      </Field>
+      <Field label={t("warranty")}>
+        <select
+          className={inputCls}
+          value={form.warrantyMonths}
+          onChange={(e) => setForm({ ...form, warrantyMonths: Number(e.target.value) })}
+        >
+          {WARRANTY_OPTIONS.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
       </Field>
       <Field label={t("note")}>
         <textarea className={inputCls} rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />

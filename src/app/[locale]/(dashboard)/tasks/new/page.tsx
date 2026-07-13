@@ -6,26 +6,57 @@ import TaskForm from "@/components/tasks/TaskForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewTaskPage({ params }: { params: { locale: string } }) {
+export default async function NewTaskPage({
+  params,
+  searchParams,
+}: {
+  params: { locale: string };
+  searchParams: { request?: string };
+}) {
   const t = await getTranslations();
   const session = (await auth())!;
   if (session.user.role !== "ADMIN") redirect(`/${params.locale}/tasks`);
 
   const locale = await getLocale();
-  const [clients, brigades, machineTypes] = await Promise.all([
+  const [clients, staff, machineTypes] = await Promise.all([
     prisma.client.findMany({
       include: { machines: { include: { type: true } }, invoices: { orderBy: { createdAt: "desc" } } },
       orderBy: { name: "asc" },
     }),
-    prisma.brigade.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { role: { in: ["BRIGADE_LEADER", "BRIGADE_MEMBER"] }, isActive: true },
+      include: { brigade: true },
+      orderBy: [{ brigadeId: "asc" }, { role: "asc" }, { name: "asc" }],
+    }),
     prisma.machineType.findMany({ orderBy: { nameUk: "asc" } }),
   ]);
+
+  // передзаповнення із заявки на виїзд
+  let requestInitial: any = undefined;
+  if (searchParams.request) {
+    const req = await prisma.serviceRequest.findUnique({
+      where: { id: searchParams.request },
+      include: { client: true },
+    });
+    if (req && req.status === "NEW" && req.clientId) {
+      requestInitial = {
+        requestId: req.id,
+        clientId: req.clientId,
+        machineIds: req.machineId ? [req.machineId] : [],
+        taskType: "REPAIR",
+        note: req.problem,
+        city: (req as any).client?.city ?? "",
+        oblast: (req as any).client?.oblast ?? "",
+      };
+    }
+  }
 
   return (
     <div>
       <h1 className="mb-4 text-xl font-bold">{t("tasks.new")}</h1>
       <TaskForm
         isAdmin
+        initial={requestInitial}
         clients={clients.map((c: any) => ({
           id: c.id,
           name: c.name,
@@ -37,7 +68,13 @@ export default async function NewTaskPage({ params }: { params: { locale: string
           })),
           invoices: c.invoices.map((i: any) => ({ id: i.id, number: i.number })),
         }))}
-        brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+        staff={staff.map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          brigadeId: u.brigadeId,
+          brigadeName: u.brigade?.name ?? null,
+        }))}
         machineTypes={machineTypes.map((tp: any) => ({
           id: tp.id,
           name: locale === "ru" ? tp.nameRu : tp.nameUk,

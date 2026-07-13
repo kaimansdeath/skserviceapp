@@ -18,7 +18,13 @@ export default function UserForm({ brigades }: { brigades: { id: string; name: s
     name: "",
     login: "",
     password: "",
-    role: "BRIGADE_LEADER" as "ADMIN" | "BRIGADE_LEADER" | "VIEWER" | "ACCOUNTANT",
+    role: "BRIGADE_LEADER" as
+      | "ADMIN"
+      | "BRIGADE_LEADER"
+      | "BRIGADE_MEMBER"
+      | "STOREKEEPER"
+      | "VIEWER"
+      | "ACCOUNTANT",
     brigadeId: "",
   });
 
@@ -54,12 +60,14 @@ export default function UserForm({ brigades }: { brigades: { id: string; name: s
             onChange={(e) => setForm({ ...form, role: e.target.value as any })}
           >
             <option value="BRIGADE_LEADER">{tr("BRIGADE_LEADER")}</option>
+            <option value="BRIGADE_MEMBER">{tr("BRIGADE_MEMBER")}</option>
+            <option value="STOREKEEPER">{tr("STOREKEEPER")}</option>
             <option value="ADMIN">{tr("ADMIN")}</option>
             <option value="VIEWER">{tr("VIEWER")}</option>
             <option value="ACCOUNTANT">{tr("ACCOUNTANT")}</option>
           </select>
         </Field>
-        {form.role === "BRIGADE_LEADER" && (
+        {["BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(form.role) && (
           <Field label={t("fields.brigade")}>
             <select
               className={inputCls}
@@ -83,7 +91,7 @@ export default function UserForm({ brigades }: { brigades: { id: string; name: s
             !form.name ||
             form.login.length < 3 ||
             form.password.length < 8 ||
-            (form.role === "BRIGADE_LEADER" && !form.brigadeId)
+            (["BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(form.role) && !form.brigadeId)
           }
           onClick={submit}
         >

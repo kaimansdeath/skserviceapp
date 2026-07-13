@@ -1,4 +1,5 @@
 import { getTranslations, getLocale } from "next-intl/server";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -40,7 +41,9 @@ export default async function DashboardPage({
   const t = await getTranslations();
   const locale = await getLocale();
   const session = (await auth())!;
+  if (session.user.role === "STOREKEEPER") redirect("/tools");
   const isBrigadier = session.user.role === "BRIGADE_LEADER";
+  const isField = isBrigadier || session.user.role === "BRIGADE_MEMBER";
   const today = kyivToday();
 
   const brigades = await prisma.brigade.findMany({
@@ -177,24 +180,12 @@ export default async function DashboardPage({
   }
 
   /* ---------------- Зведення дня ---------------- */
-  const brigadeScope = isBrigadier
-    ? { OR: [{ brigadeId: session.user.brigadeId }, { secondBrigadeId: session.user.brigadeId }] }
-    : {};
-  const [todayTasks, overdueTasks, upcoming] = await Promise.all([
+  const brigadeScope = isField ? { assignees: { some: { id: session.user.id } } } : {};
+  const [todayTasks, upcoming] = await Promise.all([
     prisma.task.findMany({
       where: {
         dateFrom: { lte: today },
         dateTo: { gte: today },
-        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-        ...brigadeScope,
-      },
-      include: { brigade: true, secondBrigade: true, client: true },
-      orderBy: { dateTo: "asc" },
-      take: 20,
-    }),
-    prisma.task.findMany({
-      where: {
-        dateTo: { lt: today },
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
         ...brigadeScope,
       },
@@ -270,11 +261,16 @@ export default async function DashboardPage({
       dateTo: { gte: monthStart },
       ...(searchParams.kbrig
         ? { OR: [{ brigadeId: searchParams.kbrig }, { secondBrigadeId: searchParams.kbrig }] }
-        : isBrigadier
+        : isField
           ? brigadeScope
           : {}),
     },
-    include: { brigade: true, secondBrigade: true, client: true },
+    include: {
+      brigade: true,
+      secondBrigade: true,
+      client: true,
+      assignees: { select: { id: true, name: true, role: true } },
+    },
     orderBy: { dateFrom: "asc" },
     take: 200,
   });
@@ -291,23 +287,80 @@ export default async function DashboardPage({
     today >= monthStart && today <= monthEnd ? today.getUTCDate() - 1 : -1;
   const clampIdx = (d: Date) =>
     Math.min(Math.max(Math.round((d.getTime() - monthStart.getTime()) / 86400000), 0), daysInMonth - 1);
-  const ganttRows: GanttRow[] = (kanbanTasks as any[]).slice(0, 40).map((task) => ({
-    id: task.id,
-    title: task.client.name,
-    sub: `${task.city} · ${executorNamePlain(task)}`,
-    startIdx: clampIdx(task.dateFrom),
-    endIdx: clampIdx(task.dateTo),
-    color: STATUS_HEX[task.status as keyof typeof STATUS_HEX] ?? "#9CA3AF",
-    overdue: isOverdue(task.dateTo, task.status),
-  }));
+
+  // рядок календаря = виконавець (людина або аутсорсер)
+  const execMap = new Map<string, { name: string; sort: number; tasks: any[] }>();
+  for (const task of kanbanTasks as any[]) {
+    if (task.executorType === "OUTSOURCE") {
+      const key = `o:${task.outsourceName ?? "?"}`;
+      if (!execMap.has(key))
+        execMap.set(key, { name: `${task.outsourceName ?? "?"} (${t("tasks.executor.OUTSOURCE")})`, sort: 1, tasks: [] });
+      execMap.get(key)!.tasks.push(task);
+    } else {
+      for (const a of task.assignees) {
+        const key = `u:${a.id}`;
+        if (!execMap.has(key)) execMap.set(key, { name: a.name, sort: 0, tasks: [] });
+        execMap.get(key)!.tasks.push(task);
+      }
+    }
+  }
+  const ganttRows: GanttRow[] = [...execMap.entries()]
+    .sort((a, b) => a[1].sort - b[1].sort || a[1].name.localeCompare(b[1].name))
+    .map(([key, e]) => {
+      const bars = e.tasks
+        .map((task) => ({
+          id: task.id,
+          startIdx: clampIdx(task.dateFrom),
+          endIdx: clampIdx(task.dateTo),
+          color: STATUS_HEX[task.status as keyof typeof STATUS_HEX] ?? "#9CA3AF",
+          title: `${task.client.name}, ${task.city} · ${formatDateUa(task.dateFrom)}–${formatDateUa(task.dateTo)}`,
+          lane: 0,
+        }))
+        .sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
+      // роздача "доріжок", щоб полоси не накладались
+      const laneEnds: number[] = [];
+      for (const bar of bars) {
+        let lane = laneEnds.findIndex((end) => end < bar.startIdx);
+        if (lane === -1) {
+          lane = laneEnds.length;
+          laneEnds.push(bar.endIdx);
+        } else {
+          laneEnds[lane] = bar.endIdx;
+        }
+        bar.lane = lane;
+      }
+      return { key, name: e.name, bars, lanes: Math.max(1, laneEnds.length) };
+    });
 
   /* ---------------- Аналітика (MTTR, тривалість) ---------------- */
   const yearAgo = new Date(today);
   yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
-  const doneTasks = await prisma.task.findMany({
-    where: { status: "DONE", dateTo: { gte: yearAgo } },
-    include: { machines: { include: { type: true } } },
-  });
+  const [doneTasks, closedRequests] = await Promise.all([
+    prisma.task.findMany({
+      where: { status: "DONE", dateTo: { gte: yearAgo } },
+      include: { machines: { include: { type: true } } },
+    }),
+    prisma.serviceRequest.findMany({
+      where: { status: "CLOSED", taskId: { not: null }, createdAt: { gte: yearAgo } },
+      select: { createdAt: true, taskId: true },
+    }),
+  ]);
+
+  // реакція на заявку: від отримання до дати виїзду бригади
+  const reqTaskIds = (closedRequests as any[]).map((r) => r.taskId) as string[];
+  const reqTasks = reqTaskIds.length
+    ? await prisma.task.findMany({
+        where: { id: { in: reqTaskIds } },
+        select: { id: true, dateFrom: true },
+      })
+    : [];
+  const dispatchMap = new Map<string, Date>(reqTasks.map((x: any) => [x.id, x.dateFrom]));
+  const reactionDays = (closedRequests as any[])
+    .filter((r) => dispatchMap.has(r.taskId))
+    .map((r) =>
+      Math.max(0, (dispatchMap.get(r.taskId)!.getTime() - new Date(r.createdAt).getTime()) / 86400000)
+    )
+    .map((x) => Math.round(x * 10) / 10);
 
   const durations = (list: any[]) => list.map((x) => daysInclusive(x.dateFrom, x.dateTo));
   const avg = (nums: number[]) =>
@@ -341,10 +394,35 @@ export default async function DashboardPage({
   /* ---------------- Рендер ---------------- */
   return (
     <div className="space-y-4">
-      {/* Зведення дня — завжди видиме, першим рядком */}
-      <section className="grid gap-4 lg:grid-cols-3">
+      {/* Календар місяця: виконавці × дні — завжди видимий */}
+      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 className="mb-2 text-base font-bold">{t("dashboard.sections.calendar")}</h2>
+        <KanbanControls
+          brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
+          defaultMonth={kmonth}
+        />
+        <MonthGantt
+          days={calendarDays}
+          todayIdx={todayIdx}
+          rows={ganttRows}
+          emptyText={t("dashboard.noTasks")}
+        />
+        <div className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-500">
+          {ALL_STATUSES.map((st) => (
+            <span key={st}>
+              <span
+                className="mr-1 inline-block h-3 w-3 rounded-full align-middle"
+                style={{ backgroundColor: STATUS_HEX[st] }}
+              ></span>
+              {t(`status.${st}` as any)}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* Зведення дня */}
+      <section className="grid gap-4 lg:grid-cols-2">
         {summaryCard(t("dashboard.todayTasks"), todayTasks, "green")}
-        {summaryCard(t("dashboard.overdue"), overdueTasks, "red")}
         {summaryCard(t("dashboard.upcoming"), upcoming, "neutral")}
       </section>
 
@@ -406,37 +484,6 @@ export default async function DashboardPage({
         </div>
       </details>
 
-      {/* Календар місяця з полосками задач — розгортається */}
-      <details className="rounded-xl border border-neutral-200 bg-white">
-        <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
-          <span className="text-base font-bold">{t("dashboard.sections.calendar")}</span>
-          <span className="text-neutral-400">▾</span>
-        </summary>
-        <div className="border-t border-neutral-100 p-4">
-          <KanbanControls
-            brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
-            defaultMonth={kmonth}
-          />
-          <MonthGantt
-            days={calendarDays}
-            todayIdx={todayIdx}
-            rows={ganttRows}
-            emptyText={t("dashboard.noTasks")}
-          />
-          <div className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-500">
-            {ALL_STATUSES.map((st) => (
-              <span key={st}>
-                <span
-                  className="mr-1 inline-block h-3 w-3 rounded-full align-middle"
-                  style={{ backgroundColor: STATUS_HEX[st] }}
-                ></span>
-                {t(`status.${st}` as any)}
-              </span>
-            ))}
-          </div>
-        </div>
-      </details>
-
       {/* Аналітика — розгортається */}
       <details className="rounded-xl border border-neutral-200 bg-white">
         <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3">
@@ -462,7 +509,19 @@ export default async function DashboardPage({
             </p>
             <p className="mt-1 text-xs text-neutral-500">{t("dashboard.analytics.avgAllHint", { count: doneTasks.length })}</p>
           </div>
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 md:col-span-2">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-neutral-400">{t("dashboard.analytics.reaction")}</p>
+            <p className="mt-1 text-3xl font-bold text-brand-dark">
+              {reactionDays.length ? avg(reactionDays) : "—"}
+              {reactionDays.length > 0 && (
+                <span className="ml-1 text-sm font-medium text-neutral-400">{t("dashboard.analytics.days")}</span>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-neutral-500">
+              {t("dashboard.analytics.reactionHint", { count: reactionDays.length })}
+            </p>
+          </div>
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 md:col-span-2 lg:col-span-3">
             <p className="mb-2 text-xs uppercase tracking-wide text-neutral-400">{t("dashboard.analytics.pnrByGroup")}</p>
             {pnrRows.length === 0 ? (
               <p className="text-sm text-neutral-400">{t("dashboard.noTasks")}</p>

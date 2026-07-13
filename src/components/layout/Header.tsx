@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { Link } from "@/i18n/routing";
 import LocaleSwitcher from "./LocaleSwitcher";
 import SignOutButton from "./SignOutButton";

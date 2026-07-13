@@ -13,6 +13,8 @@ datasource db {
 enum Role {
   ADMIN // керівник відділу
   BRIGADE_LEADER // бригадир
+  BRIGADE_MEMBER // працівник бригади (перегляд своїх задач, без зміни статусів)
+  STOREKEEPER // комірник (доступ лише до розділу «Інструмент»)
   VIEWER // директор (тільки перегляд)
   ACCOUNTANT // бухгалтер (перегляд, контроль наказів на відрядження)
 }
@@ -52,6 +54,11 @@ enum CommentKind {
   COMMENT // коментар із веб-інтерфейсу
 }
 
+enum RequestStatus {
+  NEW // нова заявка
+  CLOSED // опрацьована (створено задачу або закрита вручну)
+}
+
 enum LogSource {
   WEB
   TELEGRAM
@@ -73,9 +80,13 @@ model User {
   tgPendingAction String? // JSON: очікувана відповідь у боті (причина, текст питання)
   isActive       Boolean   @default(true)
 
-  createdTasks Task[]          @relation("CreatedBy")
-  statusLogs   TaskStatusLog[]
-  taskComments TaskComment[]
+  createdTasks  Task[]          @relation("CreatedBy")
+  assignedTasks Task[]          @relation("TaskAssignees")
+  statusLogs    TaskStatusLog[]
+  taskComments  TaskComment[]
+  tools         Tool[]
+  toolMovements ToolMovement[]
+  toolRequests  ToolRequest[]   @relation("ToolRequestedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -89,6 +100,7 @@ model Brigade {
   users          User[]
   tasks          Task[] @relation("TaskPrimaryBrigade")
   secondaryTasks Task[] @relation("TaskSecondBrigade")
+  tools          Tool[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -104,10 +116,11 @@ model Client {
   manager   Manager? @relation(fields: [managerId], references: [id])
   note      String?
 
-  contacts ClientContact[]
-  invoices Invoice[]
-  machines Machine[]
-  tasks    Task[]
+  contacts        ClientContact[]
+  invoices        Invoice[]
+  machines        Machine[]
+  tasks           Task[]
+  serviceRequests ServiceRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,11 +182,13 @@ model Machine {
   client       Client      @relation(fields: [clientId], references: [id])
   typeId       String
   type         MachineType @relation(fields: [typeId], references: [id])
-  model        String
-  serialNumber String?
-  note         String?
+  model           String
+  serialNumber    String?
+  warrantyMonths  Int     @default(12) // гарантійний строк, міс. (12/18/24/36)
+  note            String?
 
-  tasks Task[]
+  tasks           Task[]
+  serviceRequests ServiceRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -190,6 +205,7 @@ model Task {
   secondBrigadeId String? // друга бригада на об'єкті (опційно)
   secondBrigade   Brigade?     @relation("TaskSecondBrigade", fields: [secondBrigadeId], references: [id])
   outsourceName   String? // обов'язково при executorType=OUTSOURCE
+  assignees       User[]       @relation("TaskAssignees") // конкретні виконавці (бригадири + працівники)
   clientId      String
   client        Client     @relation(fields: [clientId], references: [id])
   machines      Machine[] // верстати, за якими їде бригада (може бути кілька)
@@ -245,6 +261,114 @@ model TaskStatusLog {
   createdAt  DateTime    @default(now())
 
   @@index([taskId, createdAt])
+}
+
+// Заявки на виїзд сервісної служби (з Telegram-бота, від неавторизованих)
+model ServiceRequest {
+  id           String        @id @default(cuid())
+  number       Int           @unique @default(autoincrement()) // людський номер заявки
+  status       RequestStatus @default(NEW)
+  chatId       String? // Telegram chat заявника (для зворотного зв'язку)
+  serialNumber String
+  machineId    String?
+  machine      Machine?      @relation(fields: [machineId], references: [id])
+  clientId     String?
+  client       Client?       @relation(fields: [clientId], references: [id])
+  // якщо верстат не знайдено за S/N:
+  machineTypeText String?
+  modelText       String?
+  contactName     String?
+  contactPhone    String?
+  problem      String
+  taskId       String? // створена з заявки задача
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+// Стан діалогу бота (для покрокових сценаріїв, зокрема заявок)
+model BotDialog {
+  chatId    String   @id
+  state     String // JSON
+  updatedAt DateTime @updatedAt
+}
+
+enum ToolClass {
+  HAND // ручний
+  ELECTRIC // електричний
+  MEASURING // вимірювальний
+  TOOLING // оснастка
+  MODULES // модулі
+}
+
+enum ToolStatus {
+  WORKING // робочий
+  BROKEN // зламаний
+  LOST // втрачений
+}
+
+enum ToolReqKind {
+  PURCHASE // заявка на закупку
+  ISSUE // заявка на видачу зі складу
+}
+
+enum ToolReqStatus {
+  NEW
+  DONE
+  REJECTED
+}
+
+// Робочий інструмент (склад / бригада / особисте користування)
+model Tool {
+  id              String     @id @default(cuid())
+  name            String
+  inventoryNumber String?
+  toolClass       ToolClass
+  status          ToolStatus @default(WORKING)
+  note            String?
+  holderBrigadeId String?
+  holderBrigade   Brigade?   @relation(fields: [holderBrigadeId], references: [id])
+  holderUserId    String?
+  holderUser      User?      @relation(fields: [holderUserId], references: [id])
+
+  movements ToolMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([holderBrigadeId])
+  @@index([holderUserId])
+}
+
+// Журнал переміщень і змін інструменту
+model ToolMovement {
+  id       String  @id @default(cuid())
+  toolId   String
+  tool     Tool    @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  byUserId String?
+  byUser   User?   @relation(fields: [byUserId], references: [id])
+  text     String
+
+  createdAt DateTime @default(now())
+
+  @@index([toolId, createdAt])
+}
+
+// Заявки бригадирів: закупка / видача інструменту
+model ToolRequest {
+  id            String        @id @default(cuid())
+  kind          ToolReqKind
+  status        ToolReqStatus @default(NEW)
+  text          String
+  requestedById String?
+  requestedBy   User?         @relation("ToolRequestedBy", fields: [requestedById], references: [id])
+  resolvedById  String?
+  resolvedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([kind, status, createdAt])
 }
 
 model GeoCache {

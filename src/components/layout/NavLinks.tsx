@@ -7,13 +7,21 @@ const ITEMS: Array<{ href: string; key: string; roles?: string[] }> = [
   { href: "/", key: "dashboard" },
   { href: "/tasks", key: "tasks" },
   { href: "/archive", key: "archive" },
+  { href: "/requests", key: "requests", roles: ["ADMIN", "VIEWER"] },
+  { href: "/tools", key: "tools" },
   { href: "/clients", key: "clients" },
   { href: "/machines", key: "machines" },
   { href: "/brigades", key: "brigades", roles: ["ADMIN", "VIEWER"] },
   { href: "/reports", key: "reports", roles: ["ADMIN", "VIEWER", "ACCOUNTANT"] },
 ];
 
-export default function NavLinks({ role }: { role: string }) {
+export default function NavLinks({
+  role,
+  requestsBadge = 0,
+}: {
+  role: string;
+  requestsBadge?: number;
+}) {
   const t = useTranslations("nav");
   const pathname = usePathname();
 

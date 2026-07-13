@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { dateFieldFromYmd, archiveCutoff, formatDateUa } from "@/lib/dates";
+import { dateFieldFromYmd, formatDateUa } from "@/lib/dates";
 import uk from "@/messages/uk.json";
 import ru from "@/messages/ru.json";
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const tasks = await prisma.task.findMany({
     where: {
       status: "DONE",
-      dateTo: { lt: archiveCutoff(), ...(to ? { lte: dateFieldFromYmd(to) } : {}) },
+      ...(to ? { dateTo: { lte: dateFieldFromYmd(to) } } : {}),
       ...(from ? { dateFrom: { gte: dateFieldFromYmd(from) } } : {}),
       ...(brigade ? { OR: [{ brigadeId: brigade }, { secondBrigadeId: brigade }] } : {}),
       ...(q
