@@ -27,7 +27,7 @@ export default async function EditTaskPage({
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
-      where: { role: { in: ["BRIGADE_LEADER", "BRIGADE_MEMBER"] }, isActive: true },
+      where: { role: { in: ["BRIGADE_LEADER", "BRIGADE_MEMBER", "ADMIN"] }, isActive: true },
       include: { brigade: true },
       orderBy: [{ brigadeId: "asc" }, { role: "asc" }, { name: "asc" }],
     }),
@@ -73,6 +73,9 @@ export default async function EditTaskPage({
           machineIds: task.machines.map((m: any) => m.id),
           city: task.city,
           oblast: task.oblast,
+          address: task.address,
+          lat: task.lat,
+          lng: task.lng,
           invoiceId: task.invoiceId,
           note: task.note,
           dateFrom: toYmd(task.dateFrom),

@@ -24,7 +24,12 @@ export default async function MachinePage({ params }: { params: { id: string } }
 
   const tasks = await prisma.task.findMany({
     where: { machines: { some: { id: machine.id } } },
-    include: { brigade: true, secondBrigade: true, invoice: true },
+    include: {
+      brigade: true,
+      secondBrigade: true,
+      invoice: true,
+      assignees: { select: { id: true, name: true } },
+    },
     orderBy: { dateFrom: "desc" },
   });
 
@@ -100,7 +105,9 @@ export default async function MachinePage({ params }: { params: { id: string } }
                   <td className="px-3 py-2">
                     {task.executorType === "OUTSOURCE"
                       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-                      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
+                      : task.assignees.length > 0
+                        ? task.assignees.map((a: any) => a.name).join(", ")
+                        : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
                   </td>
                   <td className="px-3 py-2">{task.invoice?.number ?? "—"}</td>
                   <td className="px-3 py-2">

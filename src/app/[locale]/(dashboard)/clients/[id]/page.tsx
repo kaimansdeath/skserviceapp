@@ -28,7 +28,12 @@ export default async function ClientPage({ params }: { params: { id: string } })
       },
       machines: { include: { type: true }, orderBy: { model: "asc" } },
       tasks: {
-        include: { brigade: true, machines: true, invoice: true },
+        include: {
+          brigade: true,
+          machines: true,
+          invoice: true,
+          assignees: { select: { id: true, name: true } },
+        },
         orderBy: { dateFrom: "desc" },
         take: 50,
       },
@@ -156,7 +161,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
                   <td className="px-3 py-2">
                     {task.executorType === "OUTSOURCE"
                       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-                      : task.brigade?.name ?? "—"}
+                      : task.assignees.length > 0
+                        ? task.assignees.map((a: any) => a.name).join(", ")
+                        : task.brigade?.name ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-neutral-500">
                     {task.machines.length > 0

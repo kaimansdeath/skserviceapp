@@ -212,6 +212,9 @@ model Task {
   machines      Machine[] // верстати, за якими їде бригада (може бути кілька)
   city          String
   oblast        String
+  address       String? // вулиця/об'єкт (необов'язково)
+  lat           Float? // точка на карті, якщо вказана вручну
+  lng           Float?
   invoiceId     String?
   invoice       Invoice?   @relation(fields: [invoiceId], references: [id])
   orderNumber   String? // № наказу про відрядження

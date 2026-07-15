@@ -24,6 +24,9 @@ const taskInput = z
     executorType: z.enum(["BRIGADE", "OUTSOURCE"]).default("BRIGADE"),
     assigneeIds: z.array(z.string()).default([]),
     requestId: z.string().optional().nullable(),
+    address: z.string().optional().nullable(),
+    lat: z.number().optional().nullable(),
+    lng: z.number().optional().nullable(),
     outsourceName: z.string().optional().nullable(),
     clientId: z.string().min(1),
     machineIds: z.array(z.string()).default([]),
@@ -48,7 +51,10 @@ async function resolveAssignees(assigneeIds: string[]) {
     where: { id: { in: assigneeIds }, isActive: true },
     select: { id: true, role: true, brigadeId: true },
   });
-  const leaders = users.filter((u: any) => u.role === "BRIGADE_LEADER");
+  // підтверджує задачу бригадир або керівник відділу
+  const leaders = users.filter((u: any) =>
+    ["BRIGADE_LEADER", "ADMIN"].includes(u.role)
+  );
   if (leaders.length === 0) return { error: "LEADER_REQUIRED" as const };
   const brigadeIds: string[] = [];
   for (const u of users as any[]) {
@@ -90,6 +96,9 @@ export async function createTask(input: TaskInput) {
         : undefined,
       city: data.city.trim(),
       oblast: data.oblast.trim(),
+      address: data.address?.trim() || null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
       invoiceId: data.invoiceId || null,
       orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,
@@ -153,6 +162,9 @@ export async function updateTask(taskId: string, input: TaskInput & { status?: T
       machines: { set: data.machineIds.map((id) => ({ id })) },
       city: data.city.trim(),
       oblast: data.oblast.trim(),
+      address: data.address?.trim() || null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
       invoiceId: data.invoiceId || null,
       orderNumber: data.orderNumber?.trim() || null,
       note: data.note?.trim() || null,

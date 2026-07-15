@@ -97,6 +97,7 @@ const T = {
       dates: "Дати",
       note: "Примітка",
       brigade: "Бригада",
+      executors: "Виконавці",
       task: "Задача",
     },
     btn: { accept: "✅ Прийняв", question: "❓ Питання" },
@@ -194,6 +195,7 @@ const T = {
       dates: "Даты",
       note: "Примечание",
       brigade: "Бригада",
+      executors: "Исполнители",
       task: "Задача",
     },
     btn: { accept: "✅ Принял", question: "❓ Вопрос" },
@@ -282,7 +284,18 @@ function taskCard(lang: Lang, task: any): string {
   if (task.orderNumber) lines.push(`<b>${f.order}:</b> ${esc(task.orderNumber)}`);
   lines.push(`<b>${f.dates}:</b> ${formatDateUa(task.dateFrom)} — ${formatDateUa(task.dateTo)}`);
   if (task.note) lines.push(`<b>${f.note}:</b> ${esc(task.note)}`);
-  if (task.secondBrigade) {
+  if (task.address || (task.lat != null && task.lng != null)) {
+    const addr = task.address ? esc(task.address) : "";
+    const link =
+      task.lat != null && task.lng != null
+        ? ` <a href="https://www.google.com/maps?q=${task.lat},${task.lng}">🗺</a>`
+        : "";
+    lines.push(`📍 ${addr}${link}`);
+  }
+  const assignees = (task.assignees ?? []).map((a: any) => a.name).filter(Boolean);
+  if (assignees.length > 0) {
+    lines.push(`<b>${f.executors}:</b> ${esc(assignees.join(", "))}`);
+  } else if (task.secondBrigade) {
     lines.push(
       `<b>${f.brigade}:</b> ${esc(task.brigade?.name ?? "")} + ${esc(task.secondBrigade.name)}`
     );
@@ -370,7 +383,7 @@ export async function notifyTaskAssigned(taskId: string): Promise<void> {
 
   // запит на підтвердження — ТІЛЬКИ бригадирам серед призначених
   const recipients = (task as any).assignees.filter(
-    (u: any) => u.role === "BRIGADE_LEADER" && u.telegramChatId
+    (u: any) => ["BRIGADE_LEADER", "ADMIN"].includes(u.role) && u.telegramChatId
   );
 
   for (const user of recipients) {
@@ -388,7 +401,7 @@ export async function notifyTaskAssigned(taskId: string): Promise<void> {
   // Web Push бригадирам-виконавцям
   sendPushToUsers(
     (task as any).assignees
-      .filter((u: any) => u.role === "BRIGADE_LEADER")
+      .filter((u: any) => ["BRIGADE_LEADER", "ADMIN"].includes(u.role))
       .map((u: any) => u.id),
     {
       title: "🆕 Нова задача",
@@ -415,7 +428,12 @@ export async function sendDailyDigest(): Promise<{ sent: number }> {
         dateTo: { gte: today },
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
       },
-      include: { brigade: true, secondBrigade: true, client: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { name: true } },
+      },
       orderBy: { dateFrom: "asc" },
     }),
     prisma.task.findMany({
@@ -423,12 +441,22 @@ export async function sendDailyDigest(): Promise<{ sent: number }> {
         dateTo: { lt: today },
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
       },
-      include: { brigade: true, secondBrigade: true, client: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { name: true } },
+      },
       orderBy: { dateTo: "asc" },
     }),
     prisma.task.findMany({
       where: { status: "ASSIGNED", dateFrom: { gte: today } },
-      include: { brigade: true, secondBrigade: true, client: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { name: true } },
+      },
       orderBy: { dateFrom: "asc" },
     }),
   ]);
@@ -442,7 +470,8 @@ export async function sendDailyDigest(): Promise<{ sent: number }> {
       const executor =
         task.executorType === "OUTSOURCE"
           ? task.outsourceName ?? "?"
-          : `${task.brigade?.name ?? "?"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
+          : (task.assignees ?? []).map((a: any) => a.name).join(", ") ||
+            `${task.brigade?.name ?? "?"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
       return `• ${formatDateUa(task.dateFrom)}–${formatDateUa(task.dateTo)} · ${esc(executor)} · ${esc(
         task.client.name
       )}, ${esc(task.city)} · ${statusLabel(lang, task.status)}`;
@@ -1063,6 +1092,7 @@ function registerHandlers(bot: Bot) {
       invoice: true,
       brigade: true,
       secondBrigade: true,
+      assignees: { select: { name: true } },
     } as const;
 
     // 1) усі активні зараз (В дорозі / На об'єкті, сьогодні в діапазоні) — може бути кілька
@@ -1332,11 +1362,12 @@ export async function notifyMembersConfirmed(taskId: string) {
       invoice: true,
       brigade: true,
       secondBrigade: true,
-      assignees: { where: { isActive: true, role: "BRIGADE_MEMBER" } },
+      assignees: { where: { isActive: true } },
     },
   });
   if (!task) return;
   for (const member of (task as any).assignees) {
+    if (member.role !== "BRIGADE_MEMBER") continue;
     if (!member.telegramChatId) continue;
     const lang = langOf(member);
     await bot.api

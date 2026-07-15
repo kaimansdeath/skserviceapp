@@ -8,6 +8,7 @@ import { saveClient, addInvoice, saveMachine } from "@/app/actions/clients";
 import { ALL_STATUSES, TASK_TYPES, type TaskStatusValue } from "@/lib/taskStatus";
 import { OBLASTS } from "@/lib/oblasts";
 import { WARRANTY_OPTIONS } from "@/lib/warranty";
+import MapPicker from "@/components/map/MapPickerDynamic";
 import { Field, inputCls, btnPrimary, btnSecondary } from "@/components/ui/Field";
 
 export type ClientOption = {
@@ -82,6 +83,9 @@ export default function TaskForm({
     invoiceId: initial?.invoiceId ?? "",
     city: initial?.city ?? "",
     oblast: initial?.oblast ?? "",
+    address: initial?.address ?? "",
+    lat: (initial?.lat ?? null) as number | null,
+    lng: (initial?.lng ?? null) as number | null,
     orderNumber: initial?.orderNumber ?? "",
     note: initial?.note ?? "",
     dateFrom: initial?.dateFrom ?? "",
@@ -98,6 +102,8 @@ export default function TaskForm({
   const [showQuickClient, setShowQuickClient] = useState(false);
   const [qc, setQc] = useState({ name: "", edrpou: "", city: "", oblast: "" });
   const [qcPending, startQcTransition] = useTransition();
+
+  const [showMap, setShowMap] = useState(!!initial?.lat);
 
   // Пошук у списку клієнтів
   const [clientQuery, setClientQuery] = useState("");
@@ -294,7 +300,7 @@ export default function TaskForm({
   }
 
   const hasLeader = staff.some(
-    (p) => form.assigneeIds.includes(p.id) && p.role === "BRIGADE_LEADER"
+    (p) => form.assigneeIds.includes(p.id) && ["BRIGADE_LEADER", "ADMIN"].includes(p.role)
   );
   const executorFilled =
     form.executorType === "BRIGADE" ? hasLeader : !!form.outsourceName.trim();
@@ -385,11 +391,14 @@ export default function TaskForm({
                           )
                         }
                       />
-                      <span className={p.role === "BRIGADE_LEADER" ? "font-semibold" : ""}>
+                      <span className={["BRIGADE_LEADER", "ADMIN"].includes(p.role) ? "font-semibold" : ""}>
                         {p.name}
                       </span>
                       {p.role === "BRIGADE_LEADER" && (
                         <span className="text-xs text-neutral-400">{t("fields.leaderTag")}</span>
+                      )}
+                      {p.role === "ADMIN" && (
+                        <span className="text-xs text-neutral-400">{t("fields.adminTag")}</span>
                       )}
                     </label>
                   ))}
@@ -615,6 +624,24 @@ export default function TaskForm({
         <Field label={t("fields.oblast")}>
           <OblastSelect value={form.oblast} onChange={(v) => set("oblast", v)} />
         </Field>
+        <Field label={t("fields.address")}>
+          <input
+            className={inputCls}
+            placeholder={t("fields.addressPlaceholder")}
+            value={form.address}
+            onChange={(e) => set("address", e.target.value)}
+          />
+        </Field>
+        <div className="flex items-end pb-1">
+          <button
+            type="button"
+            className="text-sm font-semibold text-brand-dark hover:underline"
+            onClick={() => setShowMap((v) => !v)}
+          >
+            {showMap ? t("fields.hideMap") : t("fields.showOnMap")}
+            {form.lat != null && " 📍"}
+          </button>
+        </div>
         <Field label={t("fields.dateFrom")}>
           <input type="date" className={inputCls} value={form.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} />
         </Field>
@@ -622,6 +649,31 @@ export default function TaskForm({
           <input type="date" className={inputCls} value={form.dateTo} onChange={(e) => set("dateTo", e.target.value)} />
         </Field>
       </div>
+
+      {showMap && (
+        <div>
+          <p className="mb-1 text-xs text-neutral-500">{t("fields.mapHint")}</p>
+          <MapPicker
+            value={form.lat != null && form.lng != null ? { lat: form.lat, lng: form.lng } : null}
+            onChange={(v) => {
+              set("lat", v?.lat ?? null);
+              set("lng", v?.lng ?? null);
+            }}
+          />
+          {form.lat != null && (
+            <button
+              type="button"
+              className="mt-1 text-xs text-neutral-400 hover:text-red-600"
+              onClick={() => {
+                set("lat", null);
+                set("lng", null);
+              }}
+            >
+              ✕ {t("fields.clearPoint")}
+            </button>
+          )}
+        </div>
+      )}
 
       <Field label={t("fields.note")}>
         <textarea className={inputCls} rows={3} value={form.note} onChange={(e) => set("note", e.target.value)} />

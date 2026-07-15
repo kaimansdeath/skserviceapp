@@ -80,7 +80,10 @@ export default async function DashboardPage({
     // черговість точок: нумерація в хронологічному порядку окремо для кожної бригади
     const byBrigade = new Map<string, { name: string; points: [number, number][]; seq: number }>();
     for (const task of tasks as any[]) {
-      const pos = geo.get(geoKey(task.city, task.oblast));
+      const pos =
+        task.lat != null && task.lng != null
+          ? { lat: task.lat, lng: task.lng }
+          : geo.get(geoKey(task.city, task.oblast));
       if (!pos) continue;
       const bIds = [task.brigadeId, task.secondBrigadeId].filter(Boolean) as string[];
       for (const bid of bIds) {
@@ -153,7 +156,10 @@ export default async function DashboardPage({
       const task = brigadeActive.get(b.id);
       const hasOverdue = overdueSet.has(b.id);
       if (task) {
-        const pos = geo.get(geoKey(task.city, task.oblast)) ?? KYIV_BASE;
+        const pos =
+          (task.lat != null && task.lng != null
+            ? { lat: task.lat, lng: task.lng }
+            : geo.get(geoKey(task.city, task.oblast))) ?? KYIV_BASE;
         markers.push({
           lat: pos.lat,
           lng: pos.lng,
@@ -189,7 +195,12 @@ export default async function DashboardPage({
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
         ...brigadeScope,
       },
-      include: { brigade: true, secondBrigade: true, client: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { id: true, name: true } },
+      },
       orderBy: { dateTo: "asc" },
       take: 20,
     }),
@@ -199,21 +210,29 @@ export default async function DashboardPage({
         status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
         ...brigadeScope,
       },
-      include: { brigade: true, secondBrigade: true, client: true },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { id: true, name: true } },
+      },
       orderBy: { dateFrom: "asc" },
       take: 10,
     }),
   ]);
 
-  const executorNamePlain = (task: any) =>
-    task.executorType === "OUTSOURCE"
-      ? task.outsourceName ?? "—"
+  const assigneeNames = (task: any) =>
+    task.assignees?.length > 0
+      ? task.assignees.map((a: any) => a.name).join(", ")
       : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
+
+  const executorNamePlain = (task: any) =>
+    task.executorType === "OUTSOURCE" ? task.outsourceName ?? "—" : assigneeNames(task);
 
   const executorName = (task: any) =>
     task.executorType === "OUTSOURCE"
       ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`;
+      : assigneeNames(task);
 
   const summaryCard = (
     title: string,

@@ -54,6 +54,7 @@ export default async function ArchivePage({
         client: true,
         machines: true,
         invoice: true,
+        assignees: { select: { id: true, name: true } },
       },
       orderBy: { dateTo: "desc" },
       take: 300,
@@ -109,7 +110,9 @@ export default async function ArchivePage({
                 <td className="px-3 py-2">
                   {task.executorType === "OUTSOURCE"
                     ? `${t("tasks.executor.OUTSOURCE")}: ${task.outsourceName ?? "—"}`
-                    : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
+                    : task.assignees.length > 0
+                      ? task.assignees.map((a: any) => a.name).join(", ")
+                      : `${task.brigade?.name ?? "—"}${task.secondBrigade ? ` + ${task.secondBrigade.name}` : ""}`}
                 </td>
                 <td className="px-3 py-2">
                   {task.client.name}

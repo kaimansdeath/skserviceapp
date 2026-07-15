@@ -91,7 +91,10 @@ export default async function TaskDetailPage({
         "—"
       ),
     ],
-    [t("tasks.fields.city"), `${task.city}, ${task.oblast}`],
+    [
+      t("tasks.fields.city"),
+      `${task.city}, ${task.oblast}${task.address ? ` — ${task.address}` : ""}`,
+    ],
     [t("tasks.fields.invoice"), task.invoice?.number ?? "—"],
     [t("tasks.fields.orderNumber"), task.orderNumber ?? "—"],
     [
@@ -137,6 +140,18 @@ export default async function TaskDetailPage({
             </div>
           ))}
         </dl>
+        {task.lat != null && task.lng != null && (
+          <div className="border-t border-neutral-100 px-4 py-2.5">
+            <a
+              href={`https://www.google.com/maps?q=${task.lat},${task.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-brand-dark hover:underline"
+            >
+              📍 {t("tasks.fields.openMap")}
+            </a>
+          </div>
+        )}
       </div>
 
       {canChangeStatus && (
