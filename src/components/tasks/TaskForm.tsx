@@ -23,6 +23,7 @@ export type ClientOption = {
 type Initial = Partial<TaskInput> & {
   id?: string;
   requestId?: string;
+  launchId?: string;
   machineIds?: string[];
   assigneeIds?: string[];
   status?: TaskStatusValue;
@@ -269,6 +270,7 @@ export default function TaskForm({
     startTransition(async () => {
       const payload: TaskInput = {
         requestId: initial?.requestId,
+        launchId: initial?.launchId,
         taskType: form.taskType,
         executorType: form.executorType,
         assigneeIds: form.executorType === "BRIGADE" ? form.assigneeIds : [],

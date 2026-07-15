@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   s3.columns = [{ width: 26 }, { width: 12 }, { width: 20 }];
   s3.views = [{ state: "frozen", ySplit: 1 }];
   for (const x of report.types) {
-    s3.addRow([msgs.tasks.types[x.taskType] ?? x.taskType, x.count, x.avgDurationDays]);
+    s3.addRow([msgs.taskType[x.taskType] ?? x.taskType, x.count, x.avgDurationDays]);
   }
 
   // --- Заявки + Клієнти ---

@@ -17,8 +17,10 @@ export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = SESSION_COOKIES.some((c) => req.cookies.has(c));
   const isLoginPage = /^\/(uk|ru)\/login/.test(pathname) || pathname === "/login";
+  // публічна форма заявки на запуск верстата (для менеджерів, без входу)
+  const isPublic = /^\/(uk|ru)\/launch/.test(pathname) || pathname === "/launch";
 
-  if (!hasSession && !isLoginPage) {
+  if (!hasSession && !isLoginPage && !isPublic) {
     return NextResponse.redirect(new URL("/uk/login", req.url));
   }
   if (hasSession && isLoginPage) {

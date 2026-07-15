@@ -629,6 +629,47 @@ export async function notifyIssueApproved(requestId: string) {
   }).catch(() => {});
 }
 
+/** Сповіщення про заявку на запуск верстата (публічна форма менеджерів) */
+export async function notifyLaunchRequest(requestId: string) {
+  const bot = getBot();
+  if (!bot) return;
+  const req = await prisma.launchRequest.findUnique({
+    where: { id: requestId },
+    include: { manager: true },
+  });
+  if (!req) return;
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", isActive: true, telegramChatId: { not: null } },
+  });
+  const base = (process.env.APP_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
+  for (const admin of admins) {
+    const lang = langOf(admin);
+    const title =
+      lang === "ru"
+        ? "🏭 <b>Заявка на запуск станка</b>"
+        : "🏭 <b>Заявка на запуск верстата</b>";
+    const lines: string[] = [title];
+    if ((req as any).manager) lines.push(`<b>Менеджер:</b> ${esc((req as any).manager.name)}`);
+    lines.push(`<b>Клієнт:</b> ${esc(req.clientName)}`);
+    if (req.contactInfo) lines.push(`<b>Контакт:</b> ${esc(req.contactInfo)}`);
+    if (req.city) lines.push(`<b>Місто:</b> ${esc(req.city)}`);
+    lines.push(`<b>Верстат:</b> ${esc(req.machineText)}`);
+    if (req.desiredDate) lines.push(`<b>Бажана дата:</b> ${formatDateUa(req.desiredDate)}`);
+    if (req.note) lines.push(`<b>Примітка:</b> ${esc(req.note)}`);
+    if (base) lines.push(`\n${base}/${lang}/requests?tab=launch`);
+    await bot.api
+      .sendMessage(admin.telegramChatId!, lines.join("\n"), { parse_mode: "HTML" })
+      .catch(() => {});
+  }
+
+  sendPushToRoles(["ADMIN", "VIEWER"], {
+    title: "🏭 Заявка на запуск верстата",
+    body: `${req.clientName} · ${req.machineText}`.slice(0, 120),
+    url: "/uk/requests?tab=launch",
+    tag: `launch-${req.id}`,
+  }).catch(() => {});
+}
+
 function requestIntroKeyboard(lang: Lang): InlineKeyboard {
   return new InlineKeyboard().text(T[lang].reqBtn, "req:new");
 }

@@ -11,7 +11,7 @@ export default async function NewTaskPage({
   searchParams,
 }: {
   params: { locale: string };
-  searchParams: { request?: string };
+  searchParams: { request?: string; launch?: string };
 }) {
   const t = await getTranslations();
   const session = (await auth())!;
@@ -47,6 +47,33 @@ export default async function NewTaskPage({
         note: req.problem,
         city: (req as any).client?.city ?? "",
         oblast: (req as any).client?.oblast ?? "",
+      };
+    }
+  }
+
+  // передзаповнення із заявки на запуск верстата
+  if (!requestInitial && searchParams.launch) {
+    const lr = await prisma.launchRequest.findUnique({
+      where: { id: searchParams.launch },
+      include: { manager: true },
+    });
+    if (lr && lr.status === "NEW") {
+      const ymd = (d: Date) => d.toISOString().slice(0, 10);
+      const noteLines = [
+        `Запуск верстата: ${lr.machineText}`,
+        `Клієнт: ${lr.clientName}`,
+        lr.contactInfo ? `Контакт: ${lr.contactInfo}` : null,
+        (lr as any).manager ? `Менеджер: ${(lr as any).manager.name}` : null,
+        lr.note ? `Примітка: ${lr.note}` : null,
+      ].filter(Boolean);
+      requestInitial = {
+        launchId: lr.id,
+        taskType: "PNR",
+        city: lr.city ?? "",
+        note: noteLines.join("\n"),
+        ...(lr.desiredDate
+          ? { dateFrom: ymd(lr.desiredDate), dateTo: ymd(lr.desiredDate) }
+          : {}),
       };
     }
   }

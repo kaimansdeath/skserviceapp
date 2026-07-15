@@ -24,6 +24,7 @@ const taskInput = z
     executorType: z.enum(["BRIGADE", "OUTSOURCE"]).default("BRIGADE"),
     assigneeIds: z.array(z.string()).default([]),
     requestId: z.string().optional().nullable(),
+    launchId: z.string().optional().nullable(),
     address: z.string().optional().nullable(),
     lat: z.number().optional().nullable(),
     lng: z.number().optional().nullable(),
@@ -116,6 +117,13 @@ export async function createTask(input: TaskInput) {
     },
   });
   // Telegram-сповіщення бригадиру (не валить операцію при збої)
+  // задача створена із заявки на запуск — закриваємо її
+  if (data.launchId) {
+    await prisma.launchRequest
+      .update({ where: { id: data.launchId }, data: { status: "CLOSED", taskId: task.id } })
+      .catch(() => {});
+  }
+
   // задача створена із заявки — закриваємо заявку та повідомляємо заявника
   if (data.requestId) {
     await prisma.serviceRequest

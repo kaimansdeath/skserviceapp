@@ -171,7 +171,7 @@ export default async function ReportsPage({
               )}
               {report.types.map((x) => (
                 <tr key={x.taskType} className="border-b border-neutral-100 last:border-0">
-                  <td className={td}>{t(`tasks.types.${x.taskType}` as any)}</td>
+                  <td className={td}>{t(`taskType.${x.taskType}` as any)}</td>
                   <td className={td + " text-center"}>{x.count}</td>
                   <td className={td + " text-center"}>{x.avgDurationDays}</td>
                 </tr>

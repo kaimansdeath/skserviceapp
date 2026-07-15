@@ -134,7 +134,8 @@ model Manager {
   id   String @id @default(cuid())
   name String @unique
 
-  clients Client[]
+  clients        Client[]
+  launchRequests LaunchRequest[]
 
   createdAt DateTime @default(now())
 }
@@ -399,6 +400,26 @@ model ToolRequest {
   createdAt DateTime @default(now())
 
   @@index([kind, status, createdAt])
+}
+
+// Заявка на запуск верстата (публічна форма для менеджерів)
+model LaunchRequest {
+  id          String        @id @default(cuid())
+  number      Int           @unique @default(autoincrement())
+  status      RequestStatus @default(NEW)
+  managerId   String?
+  manager     Manager?      @relation(fields: [managerId], references: [id], onDelete: SetNull)
+  clientName  String
+  contactInfo String?
+  city        String?
+  machineText String
+  desiredDate DateTime?     @db.Date
+  note        String?
+  taskId      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
 }
 
 // Web Push підписки (PWA-нотифікації)
