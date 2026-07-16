@@ -1,5 +1,4 @@
 import { getTranslations, getLocale } from "next-intl/server";
-import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -41,7 +40,6 @@ export default async function DashboardPage({
   const t = await getTranslations();
   const locale = await getLocale();
   const session = (await auth())!;
-  if (session.user.role === "STOREKEEPER") redirect("/tools");
   const isBrigadier = session.user.role === "BRIGADE_LEADER";
   const isField = isBrigadier || session.user.role === "BRIGADE_MEMBER";
   const today = kyivToday();
@@ -323,8 +321,20 @@ export default async function DashboardPage({
       }
     }
   }
+  // Примусова черговість: спершу перелічені імена в заданому порядку,
+  // потім інші виконавці за алфавітом, аутсорсери — завжди в кінці.
+  const EXEC_PRIORITY = ["Кирилко", "Захарчук", "Фляга", "Коробка", "Комаров"];
+  const priorityIndex = (name: string) => {
+    const i = EXEC_PRIORITY.indexOf(name);
+    return i === -1 ? EXEC_PRIORITY.length : i;
+  };
   const ganttRows: GanttRow[] = [...execMap.entries()]
-    .sort((a, b) => a[1].sort - b[1].sort || a[1].name.localeCompare(b[1].name))
+    .sort(
+      (a, b) =>
+        a[1].sort - b[1].sort ||
+        priorityIndex(a[1].name) - priorityIndex(b[1].name) ||
+        a[1].name.localeCompare(b[1].name)
+    )
     .map(([key, e]) => {
       const bars = e.tasks
         .map((task) => ({
@@ -415,7 +425,15 @@ export default async function DashboardPage({
     <div className="space-y-4">
       {/* Календар місяця: виконавці × дні — завжди видимий */}
       <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-2 text-base font-bold">{t("dashboard.sections.calendar")}</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-base font-bold">{t("dashboard.sections.calendar")}</h2>
+          <Link
+            href="/tasks/new"
+            className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark"
+          >
+            + {t("dashboard.newTask")}
+          </Link>
+        </div>
         <KanbanControls
           brigades={brigades.map((b: any) => ({ id: b.id, name: b.name }))}
           defaultMonth={kmonth}

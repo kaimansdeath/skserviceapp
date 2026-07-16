@@ -25,14 +25,16 @@ export async function GET() {
       drop_pending_updates: true,
       allowed_updates: ["message", "callback_query"],
     });
-    // для неавторизованих (за замовчуванням) — лише заявка на виїзд;
+    // для неавторизованих (за замовчуванням) — головне меню + заявка на виїзд;
     // персональні меню виставляються чат-скоупом при прив'язці (/start КОД)
     await bot.api.setMyCommands([
+      { command: "menu", description: "Головне меню" },
       { command: "request", description: "Запит на виїзд сервісу" },
       { command: "start", description: "Прив'язка облікового запису" },
     ]);
     await bot.api.setMyCommands(
       [
+        { command: "menu", description: "Главное меню" },
         { command: "request", description: "Заявка на выезд сервиса" },
         { command: "start", description: "Привязка учётной записи" },
       ],

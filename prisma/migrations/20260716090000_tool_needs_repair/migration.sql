@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ToolStatus" ADD VALUE 'NEEDS_REPAIR' BEFORE 'BROKEN';

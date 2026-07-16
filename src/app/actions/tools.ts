@@ -67,6 +67,49 @@ export async function addTool(input: ToolInput) {
   return { ok: true as const, id: tool.id };
 }
 
+/** Редагування картки інструменту (без кількості/розподілу — для цього окрема дія) */
+const editInput = z.object({
+  name: z.string().min(1),
+  manufacturer: z.string().optional().nullable(),
+  inventoryNumber: z.string().optional().nullable(),
+  toolClass: z.enum([
+    "HAND", "ELECTRIC", "MEASURING", "TOOLING", "MODULES", "ZIP", "CONSUMABLES", "OTHER",
+  ]),
+  note: z.string().optional().nullable(),
+});
+export type EditToolInput = z.infer<typeof editInput>;
+
+export async function editTool(toolId: string, input: EditToolInput) {
+  const session = await requireToolManager();
+  const parsed = editInput.safeParse(input);
+  if (!parsed.success) return { error: "VALIDATION" as const };
+  const data = parsed.data;
+  const before = await prisma.tool.findUnique({ where: { id: toolId } });
+  if (!before) return { error: "NOT_FOUND" as const };
+
+  await prisma.tool.update({
+    where: { id: toolId },
+    data: {
+      name: data.name.trim(),
+      manufacturer: data.manufacturer?.trim() || null,
+      inventoryNumber: data.inventoryNumber?.trim() || null,
+      toolClass: data.toolClass,
+      note: data.note?.trim() || null,
+    },
+  });
+  if (before.name !== data.name.trim()) {
+    await prisma.toolMovement.create({
+      data: {
+        toolId,
+        byUserId: session.user.id,
+        text: `Редагування картки: «${before.name}» → «${data.name.trim()}»`,
+      },
+    });
+  }
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
 /** Видалення — лише керівник відділу */
 export async function deleteTool(toolId: string) {
   const session = await requireSession();
@@ -78,11 +121,15 @@ export async function deleteTool(toolId: string) {
 
 const STATUS_LABEL: Record<string, string> = {
   WORKING: "робочий",
+  NEEDS_REPAIR: "потребує ремонту",
   BROKEN: "зламаний",
   LOST: "втрачений",
 };
 
-export async function setToolStatus(toolId: string, status: "WORKING" | "BROKEN" | "LOST") {
+export async function setToolStatus(
+  toolId: string,
+  status: "WORKING" | "NEEDS_REPAIR" | "BROKEN" | "LOST"
+) {
   const session = await requireToolManager();
   const tool = await prisma.tool.findUnique({ where: { id: toolId } });
   if (!tool) return { error: "NOT_FOUND" as const };

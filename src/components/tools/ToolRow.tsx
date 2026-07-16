@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Link } from "@/i18n/routing";
 import { setToolStatus, deleteTool } from "@/app/actions/tools";
 import DistributeTool from "./DistributeTool";
+import EditToolForm from "./EditToolForm";
 
 export type ToolItem = {
   id: string;
@@ -14,14 +15,16 @@ export type ToolItem = {
   inventoryNumber: string | null;
   toolClass: string;
   status: string;
-  quantity: number;
-  allocations: Record<string, number>; // "w" | "b:<id>" | "p:<id>" -> qty
-  holderSummary: string;
+  quantity: number; // загальна кількість позиції
+  displayQuantity?: number; // кількість саме в цьому контексті (напр. в бригаді)
+  allocations: Record<string, number>;
+  note: string | null;
 };
 
 const STATUS_CLS: Record<string, string> = {
   WORKING: "bg-brand/10 text-brand-dark",
-  BROKEN: "bg-amber-100 text-amber-800",
+  NEEDS_REPAIR: "bg-amber-100 text-amber-800",
+  BROKEN: "bg-orange-100 text-orange-800",
   LOST: "bg-red-100 text-red-700",
 };
 
@@ -51,6 +54,18 @@ export default function ToolRow({
         {tool.manufacturer && (
           <span className="block text-xs text-neutral-400">{tool.manufacturer}</span>
         )}
+        {canManage && (
+          <EditToolForm
+            toolId={tool.id}
+            initial={{
+              name: tool.name,
+              manufacturer: tool.manufacturer,
+              inventoryNumber: tool.inventoryNumber,
+              toolClass: tool.toolClass,
+              note: tool.note,
+            }}
+          />
+        )}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-neutral-500">
         {tool.inventoryNumber ?? "—"}
@@ -59,7 +74,7 @@ export default function ToolRow({
         {t(`class.${tool.toolClass}` as any)}
       </td>
       <td className="whitespace-nowrap px-3 py-2 text-center font-semibold text-neutral-700">
-        {tool.quantity}
+        {tool.displayQuantity ?? tool.quantity}
       </td>
       <td className="whitespace-nowrap px-3 py-2">
         {canManage ? (
@@ -77,7 +92,7 @@ export default function ToolRow({
               })
             }
           >
-            {["WORKING", "BROKEN", "LOST"].map((s) => (
+            {["WORKING", "NEEDS_REPAIR", "BROKEN", "LOST"].map((s) => (
               <option key={s} value={s} className="bg-white font-normal text-neutral-800">
                 {t(`status.${s}` as any)}
               </option>
@@ -94,24 +109,19 @@ export default function ToolRow({
           </span>
         )}
       </td>
-      <td className="px-3 py-2">
-        <span className="text-neutral-700">{tool.holderSummary}</span>
-        {canManage && (
-          <div>
-            <DistributeTool
-              toolId={tool.id}
-              totalQuantity={tool.quantity}
-              current={tool.allocations}
-              brigades={brigades}
-              people={people}
-            />
-          </div>
-        )}
-      </td>
       <td className="px-3 py-2 text-right">
+        {canManage && (
+          <DistributeTool
+            toolId={tool.id}
+            totalQuantity={tool.quantity}
+            current={tool.allocations}
+            brigades={brigades}
+            people={people}
+          />
+        )}
         {canDelete && (
           <button
-            className="text-neutral-300 transition hover:text-red-600 disabled:opacity-40"
+            className="ml-2 text-neutral-300 transition hover:text-red-600 disabled:opacity-40"
             title={t("delete")}
             disabled={pending}
             onClick={() => {

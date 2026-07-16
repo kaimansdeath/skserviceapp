@@ -76,7 +76,7 @@ async function main() {
     where: { login: "admin" },
     update: {},
     create: {
-      name: "Керівник відділу",
+      name: "Комаров",
       login: "admin",
       passwordHash: hash(ADMIN_PASSWORD),
       role: Role.ADMIN,

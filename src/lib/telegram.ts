@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { applyStatusChange } from "@/lib/taskService";
 import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
 import { formatDateUa, kyivToday, isOverdue } from "@/lib/dates";
+import { warrantyEnd, DEFAULT_COMMISSIONING } from "@/lib/warranty";
 import { sendPushToUsers, sendPushToRoles } from "@/lib/push";
 import ukMsgs from "@/messages/uk.json";
 import ruMsgs from "@/messages/ru.json";
@@ -63,6 +64,36 @@ const T = {
     toolKindIssue: "📦 Видача зі складу",
     toolReqApproved: "✅ Вашу заявку на видачу погоджено — комірник підготує інструмент:",
     toolIssueApprovedTitle: "📦 <b>Погоджена видача — підготуйте інструмент</b>",
+    roleMenuPrompt: "Оберіть, хто ви:",
+    btnClient: "🙋 Я клієнт",
+    btnStaff: "👷 Я співробітник",
+    clientMenuPrompt: "Оберіть дію:",
+    btnService: "🛠 Заявка на обслуговування",
+    btnMachineInfo: "ℹ️ Інформація про верстат",
+    btnHistory: "📜 Історія",
+    btnContact: "☎️ Зв'язатися з компанією",
+    notLinkedStaff:
+      "На жаль, цей номер не пов'язаний з жодним акаунтом. Зверніться до адміністратора.",
+    btnStaffCurrent: "📍 Поточна задача",
+    btnStaffTasks: "📋 Мої задачі",
+    btnStaffHistory: "📜 Історія верстата",
+    btnStaffToolBuy: "🛒 Заявка на закупку",
+    btnStaffToolIssue: "📦 Заявка на видачу",
+    askSerialInfo: "Введіть серійний номер верстата з шильда:",
+    askSerialHistory: "Введіть серійний номер верстата з шильда:",
+    machineInfoHeader: "ℹ️ <b>Інформація про верстат</b>",
+    machineInfoClient: "Клієнт",
+    machineInfoMachine: "Верстат",
+    machineInfoLaunch: "Дата запуску",
+    machineInfoWarranty: "Гарантія до",
+    machineNotFound:
+      "Верстат із таким серійним номером не знайдено в базі. Зверніться до сервісної служби.",
+    historyHeader: "📜 <b>Історія виїздів</b>",
+    historyEmpty: "Виїздів по цьому верстату ще не було.",
+    historyNoteLabel: "Примітка",
+    historyReportLabel: "Звіт",
+    historyExecutorsLabel: "Виконавці",
+    backToMenu: "⬅️ Головне меню",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -161,6 +192,36 @@ const T = {
     toolKindIssue: "📦 Выдача со склада",
     toolReqApproved: "✅ Ваша заявка на выдачу согласована — кладовщик подготовит инструмент:",
     toolIssueApprovedTitle: "📦 <b>Согласованная выдача — подготовьте инструмент</b>",
+    roleMenuPrompt: "Выберите, кто вы:",
+    btnClient: "🙋 Я клиент",
+    btnStaff: "👷 Я сотрудник",
+    clientMenuPrompt: "Выберите действие:",
+    btnService: "🛠 Заявка на обслуживание",
+    btnMachineInfo: "ℹ️ Информация о станке",
+    btnHistory: "📜 История",
+    btnContact: "☎️ Связаться с компанией",
+    notLinkedStaff:
+      "К сожалению, этот номер не привязан ни к одному аккаунту. Обратитесь к администратору.",
+    btnStaffCurrent: "📍 Текущая задача",
+    btnStaffTasks: "📋 Мои задачи",
+    btnStaffHistory: "📜 История станка",
+    btnStaffToolBuy: "🛒 Заявка на закупку",
+    btnStaffToolIssue: "📦 Заявка на выдачу",
+    askSerialInfo: "Введите серийный номер станка с шильда:",
+    askSerialHistory: "Введите серийный номер станка с шильда:",
+    machineInfoHeader: "ℹ️ <b>Информация о станке</b>",
+    machineInfoClient: "Клиент",
+    machineInfoMachine: "Станок",
+    machineInfoLaunch: "Дата запуска",
+    machineInfoWarranty: "Гарантия до",
+    machineNotFound:
+      "Станок с таким серийным номером не найден в базе. Обратитесь в сервисную службу.",
+    historyHeader: "📜 <b>История выездов</b>",
+    historyEmpty: "Выездов по этому станку ещё не было.",
+    historyNoteLabel: "Примечание",
+    historyReportLabel: "Отчёт",
+    historyExecutorsLabel: "Исполнители",
+    backToMenu: "⬅️ Главное меню",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -513,6 +574,7 @@ export async function setChatMenu(chatId: string, role: string) {
   let cmds: { command: string; description: string }[];
   if (role === "BRIGADE_LEADER") {
     cmds = [
+      { command: "menu", description: "Головне меню" },
       { command: "current", description: "Поточна задача" },
       { command: "tasks", description: "Мої задачі" },
       { command: "archive", description: "Архів задач" },
@@ -520,12 +582,16 @@ export async function setChatMenu(chatId: string, role: string) {
     ];
   } else if (role === "BRIGADE_MEMBER") {
     cmds = [
+      { command: "menu", description: "Головне меню" },
       { command: "current", description: "Поточна задача" },
       { command: "tasks", description: "Мої задачі" },
       { command: "archive", description: "Архів задач" },
     ];
+  } else if (role === "STOREKEEPER") {
+    cmds = [{ command: "menu", description: "Головне меню" }];
   } else {
     cmds = [
+      { command: "menu", description: "Головне меню" },
       { command: "current", description: "Поточна задача" },
       { command: "tasks", description: "Задачі" },
       { command: "archive", description: "Архів задач" },
@@ -670,8 +736,51 @@ export async function notifyLaunchRequest(requestId: string) {
   }).catch(() => {});
 }
 
-function requestIntroKeyboard(lang: Lang): InlineKeyboard {
-  return new InlineKeyboard().text(T[lang].reqBtn, "req:new");
+/** Головна точка входу: "Я клієнт" / "Я співробітник" */
+async function showRoleMenu(ctx: any, lang: Lang) {
+  await prisma.botDialog.delete({ where: { chatId: String(ctx.chat.id) } }).catch(() => {});
+  await ctx.reply(T[lang].roleMenuPrompt, {
+    reply_markup: new InlineKeyboard()
+      .text(T[lang].btnClient, "menu:client")
+      .row()
+      .text(T[lang].btnStaff, "menu:staff"),
+  });
+}
+
+function clientMenuKeyboard(lang: Lang): InlineKeyboard {
+  return new InlineKeyboard()
+    .text(T[lang].btnService, "creq:service")
+    .row()
+    .text(T[lang].btnMachineInfo, "creq:info")
+    .row()
+    .text(T[lang].btnHistory, "creq:history")
+    .row()
+    .text(T[lang].btnContact, "creq:contact");
+}
+
+function staffMenuKeyboard(lang: Lang, role: string): InlineKeyboard {
+  const kb = new InlineKeyboard()
+    .text(T[lang].btnStaffCurrent, "staff:current")
+    .row()
+    .text(T[lang].btnStaffTasks, "staff:tasks")
+    .row()
+    .text(T[lang].btnStaffHistory, "staff:history");
+  if (role === "BRIGADE_LEADER" || role === "ADMIN") {
+    kb.row()
+      .text(T[lang].btnStaffToolBuy, "staff:toolbuy")
+      .row()
+      .text(T[lang].btnStaffToolIssue, "staff:toolissue");
+  }
+  return kb;
+}
+
+function contactText(lang: Lang): string {
+  const envText =
+    lang === "ru" ? process.env.COMPANY_CONTACT_RU : process.env.COMPANY_CONTACT_UK;
+  if (envText) return envText;
+  return lang === "ru"
+    ? "СТАН КОМПЛЕКТ\nТел.: +380 44 000 00 00\nEmail: service@stan-komplekt.ua"
+    : "СТАН КОМПЛЕКТ\nТел.: +380 44 000 00 00\nEmail: service@stan-komplekt.ua";
 }
 
 async function startRequestDialog(ctx: any, lang: Lang) {
@@ -737,6 +846,138 @@ export async function notifyRequesterAccepted(requestId: string) {
   const req = await prisma.serviceRequest.findUnique({ where: { id: requestId } });
   if (!req?.chatId) return;
   await bot.api.sendMessage(req.chatId, T.uk.reqAccepted + "\n\n" + T.ru.reqAccepted).catch(() => {});
+}
+
+async function startMachineInfoDialog(ctx: any, lang: Lang) {
+  const chatId = String(ctx.chat.id);
+  await prisma.botDialog.upsert({
+    where: { chatId },
+    update: { state: JSON.stringify({ flow: "minfo", step: "serial", lang, data: {} }) },
+    create: { chatId, state: JSON.stringify({ flow: "minfo", step: "serial", lang, data: {} }) },
+  });
+  await ctx.reply(T[lang].askSerialInfo);
+}
+
+async function handleMachineInfoDialog(ctx: any, state: any) {
+  const chatId = String(ctx.chat.id);
+  const lang: Lang = state.lang === "ru" ? "ru" : "uk";
+  const serial = String(ctx.message.text).trim();
+  await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+
+  const machine = await prisma.machine.findFirst({
+    where: { serialNumber: { equals: serial, mode: "insensitive" } },
+    include: { client: true },
+  });
+  if (!machine) {
+    await ctx.reply(T[lang].machineNotFound);
+    return;
+  }
+  const lastPnr = await prisma.task.findFirst({
+    where: { machines: { some: { id: machine.id } }, taskType: "PNR", status: "DONE" },
+    orderBy: { dateTo: "desc" },
+  });
+  const commissioning = lastPnr ? lastPnr.dateTo : DEFAULT_COMMISSIONING;
+  const wEnd = warrantyEnd(commissioning, (machine as any).warrantyMonths);
+
+  const lines = [
+    T[lang].machineInfoHeader,
+    `<b>${T[lang].machineInfoClient}:</b> ${esc((machine as any).client.name)}`,
+    `<b>${T[lang].machineInfoMachine}:</b> ${esc((machine as any).model)}`,
+    `<b>${T[lang].machineInfoLaunch}:</b> ${formatDateUa(commissioning)}`,
+    `<b>${T[lang].machineInfoWarranty}:</b> ${formatDateUa(wEnd)}`,
+  ];
+  await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
+}
+
+async function startClientHistoryDialog(ctx: any, lang: Lang) {
+  const chatId = String(ctx.chat.id);
+  await prisma.botDialog.upsert({
+    where: { chatId },
+    update: { state: JSON.stringify({ flow: "chistory", step: "serial", lang, data: {} }) },
+    create: { chatId, state: JSON.stringify({ flow: "chistory", step: "serial", lang, data: {} }) },
+  });
+  await ctx.reply(T[lang].askSerialHistory);
+}
+
+async function handleClientHistoryDialog(ctx: any, state: any) {
+  const chatId = String(ctx.chat.id);
+  const lang: Lang = state.lang === "ru" ? "ru" : "uk";
+  const serial = String(ctx.message.text).trim();
+  await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+
+  const machine = await prisma.machine.findFirst({
+    where: { serialNumber: { equals: serial, mode: "insensitive" } },
+  });
+  if (!machine) {
+    await ctx.reply(T[lang].machineNotFound);
+    return;
+  }
+  const tasks = await prisma.task.findMany({
+    where: {
+      machines: { some: { id: machine.id } },
+      status: { in: ["DONE", "PARTIALLY_DONE"] },
+    },
+    orderBy: { dateTo: "desc" },
+    take: 10,
+  });
+  if (tasks.length === 0) {
+    await ctx.reply(`${T[lang].historyHeader}\n${T[lang].historyEmpty}`, { parse_mode: "HTML" });
+    return;
+  }
+  const lines = tasks.map(
+    (tk: any) =>
+      `${formatDateUa(tk.dateFrom)} — ${esc(tk.note?.trim() || tk.failureReason?.trim() || "—")}`
+  );
+  await ctx.reply(`${T[lang].historyHeader}\n${lines.join("\n")}`, { parse_mode: "HTML" });
+}
+
+async function startStaffHistoryDialog(ctx: any, lang: Lang) {
+  const chatId = String(ctx.chat.id);
+  await prisma.botDialog.upsert({
+    where: { chatId },
+    update: { state: JSON.stringify({ flow: "shistory", step: "serial", lang, data: {} }) },
+    create: { chatId, state: JSON.stringify({ flow: "shistory", step: "serial", lang, data: {} }) },
+  });
+  await ctx.reply(T[lang].askSerialHistory);
+}
+
+async function handleStaffHistoryDialog(ctx: any, state: any) {
+  const chatId = String(ctx.chat.id);
+  const lang: Lang = state.lang === "ru" ? "ru" : "uk";
+  const serial = String(ctx.message.text).trim();
+  await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
+
+  const machine = await prisma.machine.findFirst({
+    where: { serialNumber: { equals: serial, mode: "insensitive" } },
+  });
+  if (!machine) {
+    await ctx.reply(T[lang].machineNotFound);
+    return;
+  }
+  const tasks = await prisma.task.findMany({
+    where: { machines: { some: { id: machine.id } } },
+    include: { assignees: { select: { name: true } }, brigade: true, secondBrigade: true },
+    orderBy: { dateFrom: "desc" },
+    take: 10,
+  });
+  if (tasks.length === 0) {
+    await ctx.reply(`${T[lang].historyHeader}\n${T[lang].historyEmpty}`, { parse_mode: "HTML" });
+    return;
+  }
+  const blocks = tasks.map((tk: any) => {
+    const executors =
+      tk.assignees.map((a: any) => a.name).join(", ") ||
+      [tk.brigade?.name, tk.secondBrigade?.name].filter(Boolean).join(" + ") ||
+      "—";
+    const rows = [
+      `<b>${formatDateUa(tk.dateFrom)} — ${formatDateUa(tk.dateTo)}</b>`,
+      `${T[lang].historyExecutorsLabel}: ${esc(executors)}`,
+    ];
+    if (tk.note?.trim()) rows.push(`${T[lang].historyNoteLabel}: ${esc(tk.note.trim())}`);
+    if (tk.failureReason?.trim()) rows.push(`${T[lang].historyReportLabel}: ${esc(tk.failureReason.trim())}`);
+    return rows.join("\n");
+  });
+  await ctx.reply(`${T[lang].historyHeader}\n\n${blocks.join("\n\n")}`, { parse_mode: "HTML" });
 }
 
 async function handleRequestDialog(ctx: any, dialogState: any) {
@@ -819,6 +1060,129 @@ async function handleRequestDialog(ctx: any, dialogState: any) {
   }
 }
 
+  async function runCurrentCommand(ctx: any) {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return showRoleMenu(ctx, lang);
+    }
+    const lang = langOf(user);
+    const today = kyivToday();
+
+    const includeFull = {
+      client: { include: { contacts: true } },
+      machines: true,
+      invoice: true,
+      brigade: true,
+      secondBrigade: true,
+      assignees: { select: { name: true } },
+    } as const;
+
+    // 1) усі активні зараз (В дорозі / На об'єкті, сьогодні в діапазоні) — може бути кілька
+    let tasks = await prisma.task.findMany({
+      where: {
+        status: { in: ["EN_ROUTE", "ON_SITE"] },
+        dateFrom: { lte: today },
+        dateTo: { gte: today },
+        ...assigneeWhere(user),
+      },
+      include: includeFull,
+      orderBy: { dateTo: "asc" },
+      take: 3,
+    });
+    // 2) інакше — найближча незавершена
+    if (tasks.length === 0) {
+      const next = await prisma.task.findFirst({
+        where: {
+          status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+          dateTo: { gte: today },
+          ...assigneeWhere(user),
+        },
+        include: includeFull,
+        orderBy: { dateFrom: "asc" },
+      });
+      if (next) tasks = [next];
+    }
+    if (tasks.length === 0) return ctx.reply(T[lang].noCurrent);
+
+    const isMember = user.role === "BRIGADE_MEMBER";
+    for (const task of tasks) {
+      await ctx.reply(
+        `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
+        {
+          parse_mode: "HTML",
+          reply_markup: isMember
+            ? undefined
+            : task.status === "ASSIGNED"
+              ? acceptKeyboard(lang, task.id)
+              : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
+        }
+      );
+    }
+  }
+
+  async function runTasksCommand(ctx: any) {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return showRoleMenu(ctx, lang);
+    }
+    const lang = langOf(user);
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...assigneeWhere(user),
+      },
+      include: { client: true },
+      orderBy: { dateFrom: "asc" },
+      take: 15,
+    });
+    if (tasks.length === 0) return ctx.reply(T[lang].noTasks);
+    await ctx.reply(`${T[lang].myTasks}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`, {
+      parse_mode: "HTML",
+    });
+  }
+
+  async function runArchiveCommand(ctx: any) {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return showRoleMenu(ctx, lang);
+    }
+    const lang = langOf(user);
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: { in: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
+        ...assigneeWhere(user),
+      },
+      include: { client: true },
+      orderBy: { dateTo: "desc" },
+      take: 10,
+    });
+    if (tasks.length === 0) return ctx.reply(T[lang].noArchive);
+    await ctx.reply(
+      `${T[lang].myArchive}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`,
+      { parse_mode: "HTML" }
+    );
+  }
+
+  async function runToolReqPrompt(ctx: any, kind: "PURCHASE" | "ISSUE") {
+    const user = await userByChat(String(ctx.chat.id));
+    if (!user) {
+      const lang = langFromCtx(ctx);
+      return showRoleMenu(ctx, lang);
+    }
+    const lang = langOf(user);
+    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+      return ctx.reply(T[lang].onlyLeaders);
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { tgPendingAction: JSON.stringify({ type: "toolreq", kind }) },
+    });
+    await ctx.reply(kind === "PURCHASE" ? T[lang].toolBuyAsk : T[lang].toolIssueAsk);
+  }
+
 function registerHandlers(bot: Bot) {
   // /start [код]
   bot.command("start", async (ctx) => {
@@ -829,13 +1193,9 @@ function registerHandlers(bot: Bot) {
     await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
 
     if (!code) {
-      if (existing) {
-        await setChatMenu(chatId, existing.role);
-        await ctx.reply(T[langOf(existing)].alreadyLinked);
-      } else {
-        const lang = langFromCtx(ctx);
-        await ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
-      }
+      const lang = existing ? langOf(existing) : langFromCtx(ctx);
+      if (existing) await setChatMenu(chatId, existing.role);
+      await showRoleMenu(ctx, lang);
       return;
     }
 
@@ -1018,7 +1378,7 @@ function registerHandlers(bot: Bot) {
     const user = await userByChat(String(ctx.chat.id));
     if (!user) {
       const lang = langFromCtx(ctx);
-      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+      return showRoleMenu(ctx, lang);
     }
     const lang = langOf(user);
     if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
@@ -1033,18 +1393,8 @@ function registerHandlers(bot: Bot) {
 
   bot.callbackQuery(/^toolreq:(PURCHASE|ISSUE)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const user = await userByChat(String(ctx.chat!.id));
-    if (!user) return;
-    const lang = langOf(user);
-    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
-      return ctx.reply(T[lang].onlyLeaders);
-    }
     const kind = ctx.match![1] as "PURCHASE" | "ISSUE";
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { tgPendingAction: JSON.stringify({ type: "toolreq", kind }) },
-    });
-    await ctx.reply(kind === "PURCHASE" ? T[lang].toolBuyAsk : T[lang].toolIssueAsk);
+    await runToolReqPrompt(ctx, kind);
   });
 
   // Заявки на інструмент (лише бригадири)
@@ -1052,132 +1402,99 @@ function registerHandlers(bot: Bot) {
     ["toolbuy", "PURCHASE"],
     ["toolissue", "ISSUE"],
   ] as const) {
-    bot.command(cmd, async (ctx) => {
-      const user = await userByChat(String(ctx.chat.id));
-      if (!user) {
-        const lang = langFromCtx(ctx);
-        return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
-      }
-      const lang = langOf(user);
-      if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
-        return ctx.reply(T[lang].onlyLeaders);
-      }
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { tgPendingAction: JSON.stringify({ type: "toolreq", kind }) },
-      });
-      await ctx.reply(kind === "PURCHASE" ? T[lang].toolBuyAsk : T[lang].toolIssueAsk);
-    });
+    bot.command(cmd, (ctx) => runToolReqPrompt(ctx, kind));
   }
 
-  // Меню: /tasks — актуальні та майбутні
-  bot.command("tasks", async (ctx) => {
+  // Головне меню: "Я клієнт" / "Я співробітник"
+  bot.command("menu", async (ctx) => {
     const user = await userByChat(String(ctx.chat.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await showRoleMenu(ctx, lang);
+  });
+
+  bot.callbackQuery("menu:client", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await ctx.reply(T[lang].clientMenuPrompt, { reply_markup: clientMenuKeyboard(lang) });
+  });
+
+  bot.callbackQuery("menu:staff", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
     if (!user) {
-      const lang = langFromCtx(ctx);
-      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+      await ctx.reply(T[lang].notLinkedStaff);
+      return;
     }
-    const lang = langOf(user);
-    const tasks = await prisma.task.findMany({
-      where: {
-        status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-        ...assigneeWhere(user),
-      },
-      include: { client: true },
-      orderBy: { dateFrom: "asc" },
-      take: 15,
-    });
-    if (tasks.length === 0) return ctx.reply(T[lang].noTasks);
-    await ctx.reply(`${T[lang].myTasks}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`, {
-      parse_mode: "HTML",
+    await ctx.reply(T[lang].clientMenuPrompt, {
+      reply_markup: staffMenuKeyboard(lang, user.role),
     });
   });
+
+  bot.callbackQuery("creq:service", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await startRequestDialog(ctx, lang);
+  });
+
+  bot.callbackQuery("creq:info", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await startMachineInfoDialog(ctx, lang);
+  });
+
+  bot.callbackQuery("creq:history", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await startClientHistoryDialog(ctx, lang);
+  });
+
+  bot.callbackQuery("creq:contact", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    const lang = user ? langOf(user) : langFromCtx(ctx);
+    await ctx.reply(contactText(lang));
+  });
+
+  bot.callbackQuery("staff:current", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await runCurrentCommand(ctx);
+  });
+
+  bot.callbackQuery("staff:tasks", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await runTasksCommand(ctx);
+  });
+
+  bot.callbackQuery("staff:history", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    if (!user) return;
+    await startStaffHistoryDialog(ctx, langOf(user));
+  });
+
+  bot.callbackQuery("staff:toolbuy", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await runToolReqPrompt(ctx, "PURCHASE");
+  });
+
+  bot.callbackQuery("staff:toolissue", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await runToolReqPrompt(ctx, "ISSUE");
+  });
+
+  // Меню: /tasks — актуальні та майбутні
+  bot.command("tasks", (ctx) => runTasksCommand(ctx));
 
   // Меню: /archive — завершені задачі бригадира
-  bot.command("archive", async (ctx) => {
-    const user = await userByChat(String(ctx.chat.id));
-    if (!user) {
-      const lang = langFromCtx(ctx);
-      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
-    }
-    const lang = langOf(user);
-    const tasks = await prisma.task.findMany({
-      where: {
-        status: { in: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-        ...assigneeWhere(user),
-      },
-      include: { client: true },
-      orderBy: { dateTo: "desc" },
-      take: 10,
-    });
-    if (tasks.length === 0) return ctx.reply(T[lang].noArchive);
-    await ctx.reply(
-      `${T[lang].myArchive}\n${tasks.map((t: any) => taskLine(lang, t)).join("\n")}`,
-      { parse_mode: "HTML" }
-    );
-  });
+  bot.command("archive", (ctx) => runArchiveCommand(ctx));
 
   // Меню: /current — поточна задача (картка + кнопки статусів)
-  bot.command("current", async (ctx) => {
-    const user = await userByChat(String(ctx.chat.id));
-    if (!user) {
-      const lang = langFromCtx(ctx);
-      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
-    }
-    const lang = langOf(user);
-    const today = kyivToday();
-
-    const includeFull = {
-      client: { include: { contacts: true } },
-      machines: true,
-      invoice: true,
-      brigade: true,
-      secondBrigade: true,
-      assignees: { select: { name: true } },
-    } as const;
-
-    // 1) усі активні зараз (В дорозі / На об'єкті, сьогодні в діапазоні) — може бути кілька
-    let tasks = await prisma.task.findMany({
-      where: {
-        status: { in: ["EN_ROUTE", "ON_SITE"] },
-        dateFrom: { lte: today },
-        dateTo: { gte: today },
-        ...assigneeWhere(user),
-      },
-      include: includeFull,
-      orderBy: { dateTo: "asc" },
-      take: 3,
-    });
-    // 2) інакше — найближча незавершена
-    if (tasks.length === 0) {
-      const next = await prisma.task.findFirst({
-        where: {
-          status: { notIn: ["DONE", "PARTIALLY_DONE", "NOT_DONE"] },
-          dateTo: { gte: today },
-          ...assigneeWhere(user),
-        },
-        include: includeFull,
-        orderBy: { dateFrom: "asc" },
-      });
-      if (next) tasks = [next];
-    }
-    if (tasks.length === 0) return ctx.reply(T[lang].noCurrent);
-
-    const isMember = user.role === "BRIGADE_MEMBER";
-    for (const task of tasks) {
-      await ctx.reply(
-        `${T[lang].current}\n${taskCard(lang, task)}\n\n${contactsBlock(lang, task.client.contacts)}`,
-        {
-          parse_mode: "HTML",
-          reply_markup: isMember
-            ? undefined
-            : task.status === "ASSIGNED"
-              ? acceptKeyboard(lang, task.id)
-              : statusKeyboard(lang, task.id, task.status as TaskStatusValue),
-        }
-      );
-    }
-  });
+  bot.command("current", (ctx) => runCurrentCommand(ctx));
 
   // Поділитися контактом (кнопка на кроці телефону в заявці)
   bot.on("message:contact", async (ctx) => {
@@ -1209,7 +1526,7 @@ function registerHandlers(bot: Bot) {
   bot.on("message:text", async (ctx) => {
     const chatId = String(ctx.chat.id);
 
-    // покроковий діалог заявки має пріоритет
+    // покроковий діалог (заявка / інфо про верстат / історія) має пріоритет
     const dialog = await prisma.botDialog.findUnique({ where: { chatId } });
     if (dialog) {
       let st: any = null;
@@ -1217,17 +1534,20 @@ function registerHandlers(bot: Bot) {
         st = JSON.parse(dialog.state);
       } catch {}
       if (st?.flow === "request") return handleRequestDialog(ctx, st);
+      if (st?.flow === "minfo") return handleMachineInfoDialog(ctx, st);
+      if (st?.flow === "chistory") return handleClientHistoryDialog(ctx, st);
+      if (st?.flow === "shistory") return handleStaffHistoryDialog(ctx, st);
       await prisma.botDialog.delete({ where: { chatId } }).catch(() => {});
     }
 
     const user = await userByChat(chatId);
     if (!user) {
       const lang = langFromCtx(ctx);
-      return ctx.reply(T[lang].reqIntro, { reply_markup: requestIntroKeyboard(lang) });
+      return showRoleMenu(ctx, lang);
     }
     const lang = langOf(user);
 
-    if (!user.tgPendingAction) return ctx.reply(T[lang].unknown);
+    if (!user.tgPendingAction) return showRoleMenu(ctx, lang);
 
     let pending: any;
     try {
@@ -1236,7 +1556,7 @@ function registerHandlers(bot: Bot) {
       pending = null;
     }
     await prisma.user.update({ where: { id: user.id }, data: { tgPendingAction: null } });
-    if (!pending) return ctx.reply(T[lang].unknown);
+    if (!pending) return showRoleMenu(ctx, lang);
 
     const text = ctx.message.text.trim();
 

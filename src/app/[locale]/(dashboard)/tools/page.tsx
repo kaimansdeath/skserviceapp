@@ -56,22 +56,12 @@ export default async function ToolsPage({
     }),
   ]);
 
-  function toItem(x: any): ToolItem {
+  function toItem(x: any, displayQuantity?: number): ToolItem {
     const allocations: Record<string, number> = {};
-    const labels: string[] = [];
     for (const a of x.allocations) {
       const key =
         a.holderKind === "WAREHOUSE" ? "w" : a.holderKind === "BRIGADE" ? `b:${a.brigadeId}` : `p:${a.userId}`;
       allocations[key] = a.quantity;
-      if (a.quantity > 0) {
-        const label =
-          a.holderKind === "WAREHOUSE"
-            ? t("tools.warehouse")
-            : a.holderKind === "BRIGADE"
-              ? a.brigade?.name ?? "?"
-              : a.user?.name ?? "?";
-        labels.push(`${label}: ${a.quantity}`);
-      }
     }
     return {
       id: x.id,
@@ -81,8 +71,9 @@ export default async function ToolsPage({
       toolClass: x.toolClass,
       status: x.status,
       quantity: x.quantity,
+      displayQuantity,
       allocations,
-      holderSummary: labels.join(" · ") || "—",
+      note: x.note,
     };
   }
 
@@ -99,13 +90,21 @@ export default async function ToolsPage({
 
   let filtered = visible;
   if (tab === "people")
-    filtered = visible.filter(({ raw }) =>
-      (raw.allocations as any[]).some((a) => a.holderKind === "PERSON" && a.quantity > 0)
-    );
+    filtered = visible
+      .filter(({ raw }) => (raw.allocations as any[]).some((a) => a.holderKind === "PERSON" && a.quantity > 0))
+      .map(({ raw, item }) => {
+        const qty = (raw.allocations as any[])
+          .filter((a) => a.holderKind === "PERSON" && a.quantity > 0)
+          .reduce((s, a) => s + a.quantity, 0);
+        return { raw, item: { ...item, displayQuantity: qty } };
+      });
   if (tab === "warehouse")
-    filtered = visible.filter(({ raw }) =>
-      (raw.allocations as any[]).some((a) => a.holderKind === "WAREHOUSE" && a.quantity > 0)
-    );
+    filtered = visible
+      .filter(({ raw }) => (raw.allocations as any[]).some((a) => a.holderKind === "WAREHOUSE" && a.quantity > 0))
+      .map(({ raw, item }) => {
+        const alloc = (raw.allocations as any[]).find((a) => a.holderKind === "WAREHOUSE");
+        return { raw, item: { ...item, displayQuantity: alloc?.quantity ?? 0 } };
+      });
   if (tab === "tooling")
     filtered = visible.filter(({ raw }) => ["TOOLING", "MODULES"].includes(raw.toolClass));
   if (tab === "brigades")
@@ -129,14 +128,13 @@ export default async function ToolsPage({
             <th className="px-3 py-2">{t("tools.fields.class")}</th>
             <th className="px-3 py-2 text-center">{t("tools.fields.quantity")}</th>
             <th className="px-3 py-2">{t("tools.fields.status")}</th>
-            <th className="px-3 py-2">{t("tools.fields.holder")}</th>
-            <th className="w-10 px-3 py-2"></th>
+            <th className="w-24 px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
           {list.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-3 py-8 text-center text-neutral-400">
+              <td colSpan={6} className="px-3 py-8 text-center text-neutral-400">
                 {t("tools.empty")}
               </td>
             </tr>
@@ -250,11 +248,18 @@ export default async function ToolsPage({
               {brigades
                 .filter((b: any) => !isField || b.id === session.user.brigadeId)
                 .map((b: any) => {
-                  const list = filtered.filter(({ raw }) =>
-                    (raw.allocations as any[]).some(
-                      (a) => a.holderKind === "BRIGADE" && a.brigadeId === b.id && a.quantity > 0
+                  const list = filtered
+                    .filter(({ raw }) =>
+                      (raw.allocations as any[]).some(
+                        (a) => a.holderKind === "BRIGADE" && a.brigadeId === b.id && a.quantity > 0
+                      )
                     )
-                  );
+                    .map(({ raw, item }) => {
+                      const alloc = (raw.allocations as any[]).find(
+                        (a) => a.holderKind === "BRIGADE" && a.brigadeId === b.id
+                      );
+                      return { raw, item: { ...item, displayQuantity: alloc?.quantity ?? 0 } };
+                    });
                   if (list.length === 0 && isField) return null;
                   return (
                     <div key={b.id}>

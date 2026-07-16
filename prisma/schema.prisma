@@ -312,6 +312,7 @@ enum ToolClass {
 
 enum ToolStatus {
   WORKING // робочий
+  NEEDS_REPAIR // потребує ремонту
   BROKEN // зламаний
   LOST // втрачений
 }

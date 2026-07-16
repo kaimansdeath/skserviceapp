@@ -23,7 +23,7 @@ export default async function MachinesPage({
   const locale = await getLocale();
   const today = kyivToday();
   const session = (await auth())!;
-  if (session.user.role === "STOREKEEPER") redirect("/tools");
+  if (["STOREKEEPER", "BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(session.user.role)) redirect("/");
   const isAdmin = session.user.role === "ADMIN";
 
   const clientFilter: any = {};

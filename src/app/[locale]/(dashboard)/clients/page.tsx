@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function ClientsPage() {
   const t = await getTranslations();
   const session = (await auth())!;
-  if (session.user.role === "STOREKEEPER") redirect("/tools");
+  if (["STOREKEEPER", "BRIGADE_LEADER", "BRIGADE_MEMBER"].includes(session.user.role)) redirect("/");
   const isAdmin = session.user.role === "ADMIN";
 
   const clients = await prisma.client.findMany({

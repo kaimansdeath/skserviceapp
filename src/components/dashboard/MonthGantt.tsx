@@ -44,9 +44,9 @@ export default function MonthGantt({
             className={
               "border-b border-neutral-200 py-1 text-center font-semibold " +
               (i === todayIdx
-                ? "rounded-t bg-brand text-white"
+                ? "rounded-t bg-brand-dark text-white shadow-sm"
                 : d.weekend
-                  ? "bg-neutral-100 text-neutral-400"
+                  ? "bg-neutral-200 text-neutral-500"
                   : "text-neutral-500")
             }
           >
@@ -69,7 +69,7 @@ export default function MonthGantt({
                   key={r.key + "-" + i}
                   className={
                     "relative border-b border-neutral-100 " +
-                    (i === todayIdx ? "bg-brand/5" : d.weekend ? "bg-neutral-50" : "")
+                    (i === todayIdx ? "bg-brand/20" : d.weekend ? "bg-neutral-100" : "")
                   }
                   style={{ height: rowH }}
                 >
