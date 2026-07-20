@@ -24,10 +24,10 @@ const RESTRICTED_ROLE_KEYS: Record<string, string[]> = {
 
 export default function NavLinks({
   role,
-  requestsBadge = 0,
+  badges = {},
 }: {
   role: string;
-  requestsBadge?: number;
+  badges?: { requests?: number; tools?: number };
 }) {
   const t = useTranslations("nav");
   const pathname = usePathname();
@@ -54,6 +54,11 @@ export default function NavLinks({
             }
           >
             {t(i.key as any)}
+            {(i.key === "requests" ? badges.requests : i.key === "tools" ? badges.tools : 0) ? (
+              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                {i.key === "requests" ? badges.requests : badges.tools}
+              </span>
+            ) : null}
           </Link>
         );
       })}

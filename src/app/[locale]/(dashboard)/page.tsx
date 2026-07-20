@@ -185,7 +185,23 @@ export default async function DashboardPage({
 
   /* ---------------- Зведення дня ---------------- */
   const brigadeScope = isField ? { assignees: { some: { id: session.user.id } } } : {};
-  const [todayTasks, upcoming] = await Promise.all([
+  const kmonth = searchParams.kmonth ?? toYmd(today).slice(0, 7);
+  const [ky, km] = kmonth.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(ky, km - 1, 1));
+  const monthEnd = new Date(Date.UTC(ky, km, 0));
+  const yearAgo = new Date(today.getTime() - 365 * 86400000);
+  const isAdminOrViewer = ["ADMIN", "VIEWER"].includes(session.user.role);
+
+  // Один паралельний пакет замість послідовних запитів — головний виграш швидкості
+  const [
+    todayTasks,
+    upcoming,
+    kanbanTasks,
+    doneTasks,
+    closedRequests,
+    newSrvRequests,
+    newLaunchRequests,
+  ] = await Promise.all([
     prisma.task.findMany({
       where: {
         dateFrom: { lte: today },
@@ -217,6 +233,49 @@ export default async function DashboardPage({
       orderBy: { dateFrom: "asc" },
       take: 10,
     }),
+    prisma.task.findMany({
+      where: {
+        dateFrom: { lte: monthEnd },
+        dateTo: { gte: monthStart },
+        ...(searchParams.kbrig
+          ? { OR: [{ brigadeId: searchParams.kbrig }, { secondBrigadeId: searchParams.kbrig }] }
+          : isField
+            ? brigadeScope
+            : {}),
+      },
+      include: {
+        brigade: true,
+        secondBrigade: true,
+        client: true,
+        assignees: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { dateFrom: "asc" },
+      take: 200,
+    }),
+    prisma.task.findMany({
+      where: { status: "DONE", dateTo: { gte: yearAgo } },
+      include: { machines: { include: { type: true } } },
+    }),
+    prisma.serviceRequest.findMany({
+      where: { status: "CLOSED", taskId: { not: null }, createdAt: { gte: yearAgo } },
+      select: { createdAt: true, taskId: true },
+    }),
+    isAdminOrViewer
+      ? prisma.serviceRequest.findMany({
+          where: { status: "NEW" },
+          include: { machine: true, client: true },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+        })
+      : [],
+    isAdminOrViewer
+      ? prisma.launchRequest.findMany({
+          where: { status: "NEW" },
+          include: { manager: true },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+        })
+      : [],
   ]);
 
   const assigneeNames = (task: any) =>
@@ -268,29 +327,6 @@ export default async function DashboardPage({
   );
 
   /* ---------------- Канбан ---------------- */
-  const kmonth = searchParams.kmonth ?? toYmd(today).slice(0, 7);
-  const [ky, km] = kmonth.split("-").map(Number);
-  const monthStart = new Date(Date.UTC(ky, km - 1, 1));
-  const monthEnd = new Date(Date.UTC(ky, km, 0));
-  const kanbanTasks = await prisma.task.findMany({
-    where: {
-      dateFrom: { lte: monthEnd },
-      dateTo: { gte: monthStart },
-      ...(searchParams.kbrig
-        ? { OR: [{ brigadeId: searchParams.kbrig }, { secondBrigadeId: searchParams.kbrig }] }
-        : isField
-          ? brigadeScope
-          : {}),
-    },
-    include: {
-      brigade: true,
-      secondBrigade: true,
-      client: true,
-      assignees: { select: { id: true, name: true, role: true } },
-    },
-    orderBy: { dateFrom: "asc" },
-    take: 200,
-  });
   const byStatus = new Map<string, any[]>(ALL_STATUSES.map((s) => [s, []]));
   for (const task of kanbanTasks as any[]) byStatus.get(task.status)?.push(task);
 
@@ -362,19 +398,6 @@ export default async function DashboardPage({
     });
 
   /* ---------------- Аналітика (MTTR, тривалість) ---------------- */
-  const yearAgo = new Date(today);
-  yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1);
-  const [doneTasks, closedRequests] = await Promise.all([
-    prisma.task.findMany({
-      where: { status: "DONE", dateTo: { gte: yearAgo } },
-      include: { machines: { include: { type: true } } },
-    }),
-    prisma.serviceRequest.findMany({
-      where: { status: "CLOSED", taskId: { not: null }, createdAt: { gte: yearAgo } },
-      select: { createdAt: true, taskId: true },
-    }),
-  ]);
-
   // реакція на заявку: від отримання до дати виїзду бригади
   const reqTaskIds = (closedRequests as any[]).map((r) => r.taskId) as string[];
   const reqTasks = reqTaskIds.length
@@ -458,8 +481,49 @@ export default async function DashboardPage({
       </section>
 
       {/* Зведення дня */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className={"grid gap-4 " + (isAdminOrViewer ? "lg:grid-cols-3" : "lg:grid-cols-2")}>
         {summaryCard(t("dashboard.todayTasks"), todayTasks, "green")}
+        {isAdminOrViewer && (
+          <div className="rounded-xl border border-brand-orange/40 bg-white p-4">
+            <h3 className="mb-2 text-sm font-semibold text-brand-orange">
+              {t("dashboard.newRequests")}{" "}
+              <span className="text-neutral-400">
+                ({(newSrvRequests as any[]).length + (newLaunchRequests as any[]).length})
+              </span>
+            </h3>
+            {(newSrvRequests as any[]).length + (newLaunchRequests as any[]).length === 0 ? (
+              <p className="text-sm text-neutral-400">{t("dashboard.noRequests")}</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {[
+                  ...(newLaunchRequests as any[]).map((r) => ({
+                    key: `l${r.id}`,
+                    href: "/requests?tab=launch",
+                    createdAt: r.createdAt,
+                    text: `🏭 №${r.number} · ${r.clientName} — ${r.machineText}`,
+                  })),
+                  ...(newSrvRequests as any[]).map((r) => ({
+                    key: `s${r.id}`,
+                    href: "/requests?tab=tg",
+                    createdAt: r.createdAt,
+                    text: `🛠 №${r.number} · ${
+                      r.client?.name ?? [r.machineTypeText, r.modelText].filter(Boolean).join(" ") ?? "—"
+                    } — ${r.problem.slice(0, 60)}${r.problem.length > 60 ? "…" : ""}`,
+                  })),
+                ]
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .slice(0, 8)
+                  .map((row) => (
+                    <li key={row.key}>
+                      <Link href={row.href} className="text-neutral-700 hover:text-brand-dark hover:underline">
+                        {row.text}
+                      </Link>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
         {summaryCard(t("dashboard.upcoming"), upcoming, "neutral")}
       </section>
 

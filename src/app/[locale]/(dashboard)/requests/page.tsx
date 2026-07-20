@@ -6,6 +6,7 @@ import { formatDateUa } from "@/lib/dates";
 import { Link } from "@/i18n/routing";
 import RequestRowActions from "@/components/requests/RequestRowActions";
 import LaunchRowActions from "@/components/launch/LaunchRowActions";
+import AddServiceRequestForm from "@/components/requests/AddServiceRequestForm";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function RequestsPage({
   if (!["ADMIN", "VIEWER"].includes(session.user.role)) redirect(`/${params.locale}`);
   const isAdmin = session.user.role === "ADMIN";
 
-  const tab = searchParams.tab === "launch" ? "launch" : "tg";
+  const tab = searchParams.tab === "tg" ? "tg" : "launch";
 
   const [requests, launches] = await Promise.all([
     prisma.serviceRequest.findMany({
@@ -66,13 +67,16 @@ export default async function RequestsPage({
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-bold">{t("requests.title")}</h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">{t("requests.title")}</h1>
+        {isAdmin && tab === "tg" && <AddServiceRequestForm />}
+      </div>
       <p className="mb-4 text-sm text-neutral-500">
         {tab === "launch" ? t("requests.launchHint") : t("requests.hint")}
       </p>
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1">
-        {(["tg", "launch"] as const).map((tb) => {
+        {(["launch", "tg"] as const).map((tb) => {
           const badge =
             tb === "tg"
               ? (requests as any[]).filter((r) => r.status === "NEW").length
