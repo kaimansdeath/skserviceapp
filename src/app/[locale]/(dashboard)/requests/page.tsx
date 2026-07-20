@@ -7,6 +7,7 @@ import { Link } from "@/i18n/routing";
 import RequestRowActions from "@/components/requests/RequestRowActions";
 import LaunchRowActions from "@/components/launch/LaunchRowActions";
 import AddServiceRequestForm from "@/components/requests/AddServiceRequestForm";
+import AddLaunchRequestForm from "@/components/launch/AddLaunchRequestForm";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export default async function RequestsPage({
 
   const tab = searchParams.tab === "tg" ? "tg" : "launch";
 
-  const [requests, launches] = await Promise.all([
+  const [requests, launches, managers] = await Promise.all([
     prisma.serviceRequest.findMany({
       include: { machine: { include: { type: true } }, client: true },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -36,6 +37,7 @@ export default async function RequestsPage({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: 300,
     }),
+    prisma.manager.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   // дати виїзду для заявок на запуск (створені задачі)
@@ -70,6 +72,11 @@ export default async function RequestsPage({
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{t("requests.title")}</h1>
         {isAdmin && tab === "tg" && <AddServiceRequestForm />}
+        {isAdmin && tab === "launch" && (
+          <AddLaunchRequestForm
+            managers={(managers as any[]).map((m) => ({ id: m.id, name: m.name }))}
+          />
+        )}
       </div>
       <p className="mb-4 text-sm text-neutral-500">
         {tab === "launch" ? t("requests.launchHint") : t("requests.hint")}
