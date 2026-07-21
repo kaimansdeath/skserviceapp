@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { changeTaskStatus } from "@/app/actions/tasks";
@@ -24,6 +24,8 @@ export default function StatusChanger({
   const [askReason, setAskReason] = useState<TaskStatusValue | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const options = nextStatusesFor(role, current);
   if (options.length === 0) return null;
@@ -36,8 +38,17 @@ export default function StatusChanger({
         setError(res.error === "REASON_REQUIRED" ? t("reasonRequired") : tc("error"));
         return;
       }
+      // фото/відео звіту — на Volume після успішної зміни статусу
+      if (files.length > 0) {
+        const fd = new FormData();
+        for (const f of files) fd.append("files", f);
+        await fetch(`/api/tasks/${taskId}/attachments`, { method: "POST", body: fd }).catch(
+          () => {}
+        );
+      }
       setAskReason(null);
       setReason("");
+      setFiles([]);
       router.refresh();
     });
   }
@@ -89,6 +100,46 @@ export default function StatusChanger({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
+          <div>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => {
+                const list = Array.from(e.target.files ?? []);
+                if (list.length) setFiles((prev) => [...prev, ...list]);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="text-sm font-semibold text-brand-dark hover:underline"
+              onClick={() => fileRef.current?.click()}
+            >
+              📎 {t("attachMedia")}
+            </button>
+            {files.length > 0 && (
+              <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+                {files.map((f, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <span className="truncate">{f.name}</span>
+                    <span className="text-neutral-400">
+                      {(f.size / 1024 / 1024).toFixed(1)} МБ
+                    </span>
+                    <button
+                      type="button"
+                      className="text-neutral-300 hover:text-red-600"
+                      onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="flex gap-2">
             <button
               className={btnPrimary}

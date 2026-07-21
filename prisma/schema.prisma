@@ -83,7 +83,8 @@ model User {
   createdTasks  Task[]          @relation("CreatedBy")
   assignedTasks Task[]          @relation("TaskAssignees")
   statusLogs    TaskStatusLog[]
-  taskComments  TaskComment[]
+  taskComments    TaskComment[]
+  attachmentsMade TaskAttachment[]
   toolAllocations ToolAllocation[]
   toolMovements   ToolMovement[]
   toolRequests    ToolRequest[]   @relation("ToolRequestedBy")
@@ -228,7 +229,8 @@ model Task {
   createdBy     User       @relation("CreatedBy", fields: [createdById], references: [id])
 
   statusLogs TaskStatusLog[]
-  comments   TaskComment[]
+  comments    TaskComment[]
+  attachments TaskAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -401,6 +403,23 @@ model ToolRequest {
   createdAt DateTime @default(now())
 
   @@index([kind, status, createdAt])
+}
+
+// Фото/відео вкладення до задачі (звіти при зміні статусу), файли на Railway Volume
+model TaskAttachment {
+  id       String  @id @default(cuid())
+  taskId   String
+  task     Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName String // оригінальна назва
+  filePath String  @unique // відносний шлях на диску
+  mimeType String
+  size     Int
+  byUserId String?
+  byUser   User?   @relation(fields: [byUserId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 // Заявка на запуск верстата (публічна форма для менеджерів)

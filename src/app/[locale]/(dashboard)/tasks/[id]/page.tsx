@@ -31,6 +31,7 @@ export default async function TaskDetailPage({
       createdBy: true,
       statusLogs: { include: { user: true }, orderBy: { createdAt: "desc" } },
       comments: { include: { user: true }, orderBy: { createdAt: "asc" } },
+      attachments: { include: { byUser: true }, orderBy: { createdAt: "desc" } },
     },
   });
   if (!task) notFound();
@@ -157,6 +158,45 @@ export default async function TaskDetailPage({
       {canChangeStatus && (
         <div className="rounded-xl border border-neutral-200 bg-white p-4">
           <StatusChanger taskId={task.id} current={task.status as any} role={session.user.role} />
+        </div>
+      )}
+
+      {(task as any).attachments.length > 0 && (
+        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <p className="mb-3 text-sm font-semibold text-neutral-700">
+            {t("tasks.attachments")}{" "}
+            <span className="font-normal text-neutral-400">
+              ({(task as any).attachments.length})
+            </span>
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {(task as any).attachments.map((a: any) => (
+              <figure key={a.id} className="overflow-hidden rounded-lg border border-neutral-200">
+                {a.mimeType.startsWith("image/") ? (
+                  <a href={`/api/files/${a.filePath}`} target="_blank" rel="noopener noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/files/${a.filePath}`}
+                      alt={a.fileName}
+                      className="h-32 w-full object-cover transition hover:opacity-90"
+                      loading="lazy"
+                    />
+                  </a>
+                ) : (
+                  <video
+                    src={`/api/files/${a.filePath}`}
+                    controls
+                    preload="metadata"
+                    className="h-32 w-full bg-black object-contain"
+                  />
+                )}
+                <figcaption className="truncate px-2 py-1 text-xs text-neutral-500">
+                  {a.byUser?.name ?? ""} ·{" "}
+                  {new Date(a.createdAt).toLocaleDateString("uk-UA", { timeZone: "Europe/Kyiv" })}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       )}
 

@@ -4,6 +4,7 @@ import { applyStatusChange } from "@/lib/taskService";
 import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
 import { formatDateUa, kyivToday, isOverdue } from "@/lib/dates";
 import { warrantyEnd, DEFAULT_COMMISSIONING } from "@/lib/warranty";
+import { saveTaskFile } from "@/lib/uploads";
 import { sendPushToUsers, sendPushToRoles } from "@/lib/push";
 import ukMsgs from "@/messages/uk.json";
 import ruMsgs from "@/messages/ru.json";
@@ -94,6 +95,10 @@ const T = {
     historyReportLabel: "Звіт",
     historyExecutorsLabel: "Виконавці",
     backToMenu: "⬅️ Головне меню",
+    mediaSaved: "📎 Файл збережено у звіті задачі.",
+    mediaNoPending:
+      "Щоб додати фото/відео до звіту, спершу оберіть статус задачі, а потім надішліть файли з підписом.",
+    mediaTooBig: "Файл завеликий для Telegram-бота (ліміт 20 МБ). Завантажте через веб-портал.",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -222,6 +227,10 @@ const T = {
     historyReportLabel: "Отчёт",
     historyExecutorsLabel: "Исполнители",
     backToMenu: "⬅️ Главное меню",
+    mediaSaved: "📎 Файл сохранён в отчёте задачи.",
+    mediaNoPending:
+      "Чтобы добавить фото/видео к отчёту, сначала выберите статус задачи, затем отправьте файлы с подписью.",
+    mediaTooBig: "Файл слишком большой для Telegram-бота (лимит 20 МБ). Загрузите через веб-портал.",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -1497,6 +1506,96 @@ function registerHandlers(bot: Bot) {
   bot.command("current", (ctx) => runCurrentCommand(ctx));
 
   // Поділитися контактом (кнопка на кроці телефону в заявці)
+  // Фото/відео до звіту: працює під час очікування коментаря статусу
+  // (обрано фінальний статус → бот чекає підсумок) або одразу після — файл із
+  // підписом застосовує статус, файл без pending лягає до останньої активної задачі.
+  async function handleMedia(ctx: any, kind: "photo" | "video") {
+    const chatId = String(ctx.chat.id);
+    const user = await userByChat(chatId);
+    if (!user) return;
+    const lang = langOf(user);
+
+    let pending: any = null;
+    try {
+      pending = user.tgPendingAction ? JSON.parse(user.tgPendingAction) : null;
+    } catch {}
+
+    // цільова задача: з pending-статусу або остання активна задача виконавця
+    let taskId: string | null = pending?.type === "status" ? pending.taskId : null;
+    if (!taskId) {
+      const lastActive = await prisma.task.findFirst({
+        where: {
+          assignees: { some: { id: user.id } },
+          status: { in: ["CONFIRMED", "EN_ROUTE", "ON_SITE", "DONE", "PARTIALLY_DONE"] },
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      });
+      taskId = lastActive?.id ?? null;
+    }
+    if (!taskId) return ctx.reply(T[lang].mediaNoPending);
+
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) return;
+
+    const media =
+      kind === "photo"
+        ? ctx.message.photo[ctx.message.photo.length - 1]
+        : ctx.message.video;
+    if (!media) return;
+    if ((media.file_size ?? 0) > 20 * 1024 * 1024) {
+      return ctx.reply(T[lang].mediaTooBig);
+    }
+
+    try {
+      const file = await ctx.api.getFile(media.file_id);
+      const token = process.env.TELEGRAM_BOT_TOKEN!;
+      const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("download failed");
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const origName =
+        kind === "photo"
+          ? `photo_${media.file_unique_id}.jpg`
+          : (ctx.message.video?.file_name ?? `video_${media.file_unique_id}.mp4`);
+      const mime = kind === "photo" ? "image/jpeg" : ctx.message.video?.mime_type ?? "video/mp4";
+
+      const { relPath, fileName, size } = await saveTaskFile(
+        task.id,
+        task.dateFrom,
+        origName,
+        buffer,
+        mime
+      );
+      await prisma.taskAttachment.create({
+        data: { taskId: task.id, fileName, filePath: relPath, mimeType: mime, size, byUserId: user.id },
+      });
+    } catch {
+      return ctx.reply(T[lang].mediaTooBig);
+    }
+
+    const caption = ctx.message.caption?.trim();
+    // якщо чекали підсумок статусу і є підпис — застосовуємо статус цим підписом
+    if (pending?.type === "status" && caption) {
+      await prisma.user.update({ where: { id: user.id }, data: { tgPendingAction: null } });
+      const result = await applyStatusChange({
+        taskId: pending.taskId,
+        to: pending.to,
+        actor: { id: user.id, role: user.role, brigadeId: user.brigadeId },
+        source: "TELEGRAM",
+        reason: caption,
+      });
+      if (!("error" in result)) {
+        await ctx.reply(`${T[lang].statusSet} ${statusLabel(lang, pending.to)}`);
+        return;
+      }
+    }
+    await ctx.reply(T[lang].mediaSaved);
+  }
+
+  bot.on("message:photo", (ctx) => handleMedia(ctx, "photo"));
+  bot.on("message:video", (ctx) => handleMedia(ctx, "video"));
+
   bot.on("message:contact", async (ctx) => {
     const chatId = String(ctx.chat.id);
     const dialog = await prisma.botDialog.findUnique({ where: { chatId } });
