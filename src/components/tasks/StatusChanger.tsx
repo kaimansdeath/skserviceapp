@@ -99,6 +99,16 @@ export default function StatusChanger({
             rows={2}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
+            onPaste={(e) => {
+              // вставка скріншота/фото з буфера обміну одразу до звіту
+              const pasted = Array.from(e.clipboardData.files).filter(
+                (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+              );
+              if (pasted.length > 0) {
+                e.preventDefault();
+                setFiles((prev) => [...prev, ...pasted]);
+              }
+            }}
           />
           <div>
             <input
