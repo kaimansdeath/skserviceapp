@@ -1,9 +1,11 @@
 import path from "path";
+import { promises as fs } from "fs";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
 import { formatDateUa } from "@/lib/dates";
 import { warrantyEnd, DEFAULT_COMMISSIONING } from "@/lib/warranty";
 import { expandReportText } from "@/lib/ai";
+import { resolveStoredPath } from "@/lib/uploads";
 import ukMsgs from "@/messages/uk.json";
 
 /** Акт виконаних робіт: збирання даних задачі + генерація PDF (A4, фірмовий стиль) */
@@ -39,6 +41,7 @@ export async function generateTaskReportPdf(
       assignees: { select: { id: true, name: true, role: true } },
       brigade: true,
       secondBrigade: true,
+      attachments: true,
     },
   });
   if (!task) return { error: "NOT_FOUND" };
@@ -140,22 +143,31 @@ export async function generateTaskReportPdf(
   const contentW = right - left;
 
   const drawFooter = () => {
-    const y = doc.page.height - 58;
+    // текст нижче робочої зони: тимчасово знімаємо нижнє поле, інакше pdfkit
+    // додає нову сторінку (саме це давало порожній перший лист)
+    const y = doc.page.height - 54;
+    const prevBottom = doc.page.margins.bottom;
+    const prevX = doc.x;
+    const prevY = doc.y;
+    doc.page.margins.bottom = 0;
     doc.save();
     doc.moveTo(left, y).lineTo(right, y).lineWidth(1.2).strokeColor(ORANGE).stroke();
     doc
       .font("reg")
       .fontSize(7.5)
       .fillColor(GRAY)
-      .text(FOOTER_TEXT, left, y + 7, { width: contentW, align: "center", lineBreak: false });
+      .text(FOOTER_TEXT, left, y + 7, { width: contentW, align: "center" });
     doc.restore();
+    doc.page.margins.bottom = prevBottom;
+    doc.x = prevX;
+    doc.y = prevY;
   };
   drawFooter();
   doc.on("pageAdded", drawFooter);
 
   // --- шапка ---
   doc.font("bold").fontSize(17).fillColor(BRAND).text("СТАН КОМПЛЕКТ", left, 44);
-  doc.font("semi").fontSize(9).fillColor(GRAY).text("Сервісна служба · Промислове обладнання з ЧПК", left);
+  doc.font("semi").fontSize(9).fillColor(GRAY).text("Сервісна служба", left);
   doc
     .font("bold")
     .fontSize(13)
@@ -183,7 +195,10 @@ export async function generateTaskReportPdf(
     ["Статус заявки", statusLabel],
   ];
   const labelW = 150;
-  for (const [label, value] of rows) {
+  const cleanRows = rows
+    .map(([l, v]) => [l, String(v ?? "").trim()] as [string, string])
+    .filter(([, v]) => v && v !== "—" && !/^(undefined|null)$/i.test(v));
+  for (const [label, value] of cleanRows) {
     doc.font("semi").fontSize(9.5).fillColor(GRAY).text(label, left, y, { width: labelW });
     const h1 = doc.heightOfString(label, { width: labelW });
     doc
@@ -207,6 +222,47 @@ export async function generateTaskReportPdf(
     align: "justify",
     lineGap: 2.5,
   });
+
+  // --- фото зі звіту: рядок до 3 мініатюр (випадкові, якщо їх більше) ---
+  const imageAtts = (t.attachments as any[]).filter((a) =>
+    /^image\/(jpeg|png)$/.test(a.mimeType)
+  );
+  if (imageAtts.length > 0) {
+    const picked = [...imageAtts].sort(() => Math.random() - 0.5).slice(0, 3);
+    const buffers: Buffer[] = [];
+    for (const a of picked) {
+      const abs = resolveStoredPath(a.filePath);
+      if (!abs) continue;
+      try {
+        buffers.push(await fs.readFile(abs));
+      } catch {
+        // файла на диску може не бути — пропускаємо мовчки
+      }
+    }
+    if (buffers.length > 0) {
+      const gap = 10;
+      const thumbW = (contentW - gap * (buffers.length - 1)) / buffers.length;
+      const thumbH = 110;
+      let py = doc.y + 16;
+      if (py + thumbH + 20 > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        py = 60;
+      }
+      doc.font("bold").fontSize(11).fillColor(BRAND_DARK).text("Фото з виїзду", left, py);
+      py = doc.y + 6;
+      let px = left;
+      for (const buf of buffers) {
+        try {
+          doc.image(buf, px, py, { fit: [thumbW, thumbH], align: "center", valign: "center" });
+        } catch {
+          // зіпсований файл — пропускаємо
+        }
+        px += thumbW + gap;
+      }
+      doc.y = py + thumbH;
+      doc.x = left;
+    }
+  }
 
   // --- підписи (з переносом на нову сторінку за браком місця) ---
   let sy = doc.y + 34;
