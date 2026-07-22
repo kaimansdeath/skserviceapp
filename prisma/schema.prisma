@@ -231,6 +231,7 @@ model Task {
   statusLogs TaskStatusLog[]
   comments    TaskComment[]
   attachments TaskAttachment[]
+  report      TaskReport?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -403,6 +404,19 @@ model ToolRequest {
   createdAt DateTime @default(now())
 
   @@index([kind, status, createdAt])
+}
+
+// Акт виконаних робіт (згенерований звіт задачі); номер — наскрізний з 932
+model TaskReport {
+  id       String  @id @default(cuid())
+  number   Int     @unique @default(autoincrement())
+  taskId   String  @unique
+  task     Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  aiText   String // розгорнутий ШІ текст виконаних робіт
+  byUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Фото/відео вкладення до задачі (звіти при зміні статусу), файли на Railway Volume

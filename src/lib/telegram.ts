@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, webhookCallback } from "grammy";
+import { Bot, InlineKeyboard, InputFile, webhookCallback } from "grammy";
 import { prisma } from "@/lib/prisma";
 import { applyStatusChange } from "@/lib/taskService";
 import { nextStatusesFor, type TaskStatusValue } from "@/lib/taskStatus";
@@ -99,6 +99,12 @@ const T = {
     mediaNoPending:
       "Щоб додати фото/відео до звіту, спершу оберіть статус задачі, а потім надішліть файли з підписом.",
     mediaTooBig: "Файл завеликий для Telegram-бота (ліміт 20 МБ). Завантажте через веб-портал.",
+    btnStaffAct: "📄 Акт виконаних робіт",
+    actPickTask: "Оберіть задачу для акта:",
+    actNoTasks: "Немає завершених задач для формування акта.",
+    actGenerating: "⏳ Формую акт — це може зайняти до пів хвилини…",
+    actEmpty: "У задачі немає підсумку робіт — спершу закрийте задачу з коментарем.",
+    actError: "Не вдалося сформувати акт. Спробуйте пізніше.",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -231,6 +237,12 @@ const T = {
     mediaNoPending:
       "Чтобы добавить фото/видео к отчёту, сначала выберите статус задачи, затем отправьте файлы с подписью.",
     mediaTooBig: "Файл слишком большой для Telegram-бота (лимит 20 МБ). Загрузите через веб-портал.",
+    btnStaffAct: "📄 Акт выполненных работ",
+    actPickTask: "Выберите задачу для акта:",
+    actNoTasks: "Нет завершённых задач для формирования акта.",
+    actGenerating: "⏳ Формирую акт — это может занять до полминуты…",
+    actEmpty: "В задаче нет итога работ — сначала закройте задачу с комментарием.",
+    actError: "Не удалось сформировать акт. Попробуйте позже.",
     reqLabels: {
       sn: "S/N",
       type: "Тип",
@@ -776,6 +788,8 @@ function staffMenuKeyboard(lang: Lang, role: string): InlineKeyboard {
     .text(T[lang].btnStaffHistory, "staff:history");
   if (role === "BRIGADE_LEADER" || role === "ADMIN") {
     kb.row()
+      .text(T[lang].btnStaffAct, "staff:act")
+      .row()
       .text(T[lang].btnStaffToolBuy, "staff:toolbuy")
       .row()
       .text(T[lang].btnStaffToolIssue, "staff:toolissue");
@@ -1484,6 +1498,63 @@ function registerHandlers(bot: Bot) {
     const user = await userByChat(String(ctx.chat!.id));
     if (!user) return;
     await startStaffHistoryDialog(ctx, langOf(user));
+  });
+
+  bot.callbackQuery("staff:act", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    if (!user) return;
+    const lang = langOf(user);
+    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+      return ctx.reply(T[lang].onlyLeaders);
+    }
+    const tasks = await prisma.task.findMany({
+      where: {
+        status: { in: ["DONE", "PARTIALLY_DONE"] },
+        ...(user.role === "ADMIN" ? {} : { assignees: { some: { id: user.id } } }),
+      },
+      include: { client: true },
+      orderBy: { dateTo: "desc" },
+      take: 8,
+    });
+    if (tasks.length === 0) return ctx.reply(T[lang].actNoTasks);
+    const kb = new InlineKeyboard();
+    for (const tk of tasks as any[]) {
+      kb.text(
+        `${formatDateUa(tk.dateTo)} · ${tk.client.name.slice(0, 28)}`,
+        `act:${tk.id}`
+      ).row();
+    }
+    await ctx.reply(T[lang].actPickTask, { reply_markup: kb });
+  });
+
+  bot.callbackQuery(/^act:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await userByChat(String(ctx.chat!.id));
+    if (!user) return;
+    const lang = langOf(user);
+    if (user.role !== "BRIGADE_LEADER" && user.role !== "ADMIN") {
+      return ctx.reply(T[lang].onlyLeaders);
+    }
+    const taskId = ctx.match![1];
+    if (user.role !== "ADMIN") {
+      const allowed = await prisma.task.findFirst({
+        where: { id: taskId, assignees: { some: { id: user.id } } },
+        select: { id: true },
+      });
+      if (!allowed) return;
+    }
+    await ctx.reply(T[lang].actGenerating);
+    try {
+      const { generateTaskReportPdf } = await import("@/lib/actReport");
+      const result = await generateTaskReportPdf(taskId, { byUserId: user.id });
+      if ("error" in result) {
+        return ctx.reply(result.error === "EMPTY_REPORT" ? T[lang].actEmpty : T[lang].actError);
+      }
+      await ctx.replyWithDocument(new InputFile(result.buffer, result.fileName));
+    } catch {
+      await ctx.reply(T[lang].actError);
+    }
   });
 
   bot.callbackQuery("staff:toolbuy", async (ctx) => {

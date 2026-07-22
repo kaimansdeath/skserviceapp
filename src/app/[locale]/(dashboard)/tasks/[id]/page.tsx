@@ -120,17 +120,40 @@ export default async function TaskDetailPage({
           <h1 className="text-xl font-bold">{t("tasks.title")}</h1>
           <StatusBadge status={task.status} />
         </div>
-        {session.user.role === "ADMIN" && (
-          <div className="flex gap-2">
-            <Link
-              href={`/tasks/${task.id}/edit`}
-              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
+        <div className="flex gap-2">
+          {(session.user.role === "ADMIN" ||
+            session.user.role === "VIEWER" ||
+            (session.user.role === "BRIGADE_LEADER" && assigneeIds.includes(session.user.id))) && (
+            <a
+              href={`/api/tasks/${task.id}/report`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
             >
-              {t("common.edit")}
-            </Link>
-            <DeleteTaskButton taskId={task.id} />
-          </div>
-        )}
+              📄 {t("tasks.actReport")}
+            </a>
+          )}
+          {session.user.role === "ADMIN" && (
+            <>
+              <a
+                href={`/api/tasks/${task.id}/report?regen=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={t("tasks.actRegenHint")}
+                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm transition hover:bg-neutral-50"
+              >
+                ♻️
+              </a>
+              <Link
+                href={`/tasks/${task.id}/edit`}
+                className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium transition hover:bg-neutral-50"
+              >
+                {t("common.edit")}
+              </Link>
+              <DeleteTaskButton taskId={task.id} />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-neutral-200 bg-white">
