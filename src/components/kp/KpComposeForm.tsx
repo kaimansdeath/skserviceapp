@@ -32,6 +32,7 @@ export default function KpComposeForm({ onGenerated }: { onGenerated: () => void
   const [phase, setPhase] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const [result, setResult] = useState<GenResult | null>(null);
 
   // Вставка з буфера обміну (Ctrl+V) — глобально, поки відкрита вкладка складання
@@ -80,8 +81,14 @@ export default function KpComposeForm({ onGenerated }: { onGenerated: () => void
       setError(t("errNoFiles"));
       return;
     }
+    const total = files.reduce((sum, f) => sum + f.size, 0);
+    if (total > 40 * 1024 * 1024) {
+      setError(t("errTotalTooBig"));
+      return;
+    }
     setBusy(true);
     setError(null);
+    setDetail(null);
     setResult(null);
     setElapsed(0);
     setPhase(t("phaseUploading"));
@@ -99,20 +106,35 @@ export default function KpComposeForm({ onGenerated }: { onGenerated: () => void
 
     try {
       const res = await fetch("/api/kp/generate", { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
+      const raw = await res.text();
+      let data: Record<string, unknown> = {};
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        // не JSON (напр. сторінка помилки проксі 413/502) — показуємо статус і початок відповіді
+        if (!res.ok) {
+          setError(t("errGeneric"));
+          setDetail(`HTTP ${res.status} ${res.statusText} · ${raw.slice(0, 300) || t("errNoBody")}`);
+          return;
+        }
+      }
       if (!res.ok) {
-        throw new Error(typeof data?.error === "string" ? data.error : "UNKNOWN");
+        const code = typeof data.error === "string" ? data.error : "UNKNOWN";
+        setError(errorText(code, t));
+        setDetail(`HTTP ${res.status} · ${String(data.detail ?? code).slice(0, 400)}`);
+        return;
       }
       setResult({
-        id: data.id,
-        fileName: data.fileName,
-        fullName: data.fullName,
-        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        id: String(data.id),
+        fileName: String(data.fileName),
+        fullName: String(data.fullName),
+        warnings: Array.isArray(data.warnings) ? (data.warnings as string[]) : [],
       });
       onGenerated();
     } catch (e) {
-      const code = e instanceof Error ? e.message : "UNKNOWN";
-      setError(errorText(code, t));
+      // сюди потрапляють мережеві збої: обрив з'єднання, перевищення ліміту тіла запиту
+      setError(t("errNetwork"));
+      setDetail(e instanceof Error ? e.message : "network error");
     } finally {
       clearTimeout(phaseTimer);
       clearTimeout(phaseTimer2);
@@ -240,7 +262,17 @@ export default function KpComposeForm({ onGenerated }: { onGenerated: () => void
         </div>
       )}
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="space-y-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{error}</p>
+          {detail && (
+            <details>
+              <summary className="cursor-pointer text-xs text-red-500">{t("errDetails")}</summary>
+              <p className="mt-1 break-all font-mono text-xs text-red-600">{detail}</p>
+            </details>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <button type="button" className={btnPrimary} disabled={busy} onClick={generate}>

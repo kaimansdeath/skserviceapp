@@ -6,7 +6,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 const nextConfig = {
   poweredByHeader: false,
   experimental: {
-    serverComponentsExternalPackages: ["exceljs", "bcryptjs", "pdfkit"],
+    serverComponentsExternalPackages: ["exceljs", "bcryptjs", "pdfkit", "docx", "mammoth", "image-size"],
   },
 };
 

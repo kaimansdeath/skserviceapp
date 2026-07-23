@@ -96,7 +96,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "UNKNOWN";
+    // Повний стек — у логи Railway, стислий текст — в інтерфейс
+    console.error("[KP] generate failed:", e);
     const status = msg === "NO_API_KEY" ? 500 : msg.startsWith("AI_") ? 502 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return NextResponse.json({ error: msg, detail: msg.slice(0, 500) }, { status });
   }
 }
