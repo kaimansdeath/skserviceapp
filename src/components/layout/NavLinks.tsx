@@ -13,6 +13,7 @@ const ITEMS: Array<{ href: string; key: string; roles?: string[] }> = [
   { href: "/brigades", key: "brigades", roles: ["ADMIN", "VIEWER"] },
   { href: "/tools", key: "tools" },
   { href: "/reports", key: "reports", roles: ["ADMIN", "VIEWER", "ACCOUNTANT"] },
+  { href: "/kp", key: "kp", roles: ["ADMIN"] },
 ];
 
 // Обмежені ролі бачать лише фіксований набір пунктів (решта — за загальним правилом roles/без обмежень)

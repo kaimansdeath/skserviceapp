@@ -89,6 +89,7 @@ model User {
   toolMovements   ToolMovement[]
   toolRequests    ToolRequest[]   @relation("ToolRequestedBy")
   pushSubs        PushSubscription[]
+  kpDocuments     KpDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -480,4 +481,42 @@ model GeoCache {
   createdAt DateTime @default(now())
 
   @@unique([city, oblast])
+}
+
+// ===== Модуль «КП» (патч 12): генерація комерційних пропозицій =====
+
+enum KpEquipmentType {
+  LASER // лазерне обладнання
+  CNC // верстати з ЧПК
+  UNIVERSAL // універсальні верстати
+  OTHER // інше обладнання
+}
+
+// Шаблон (системний промпт) генерації КП за напрямом обладнання
+model KpTemplate {
+  id            String          @id @default(cuid())
+  equipmentType KpEquipmentType @unique
+  systemPrompt  String // інструкція для ШІ: що і як витягати з ТХ
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Згенерований файл КП (бібліотека), файли на Railway Volume у підпапці kp/
+model KpDocument {
+  id            String          @id @default(cuid())
+  machineName   String
+  equipmentType KpEquipmentType
+  fileName      String // ім'я файлу для скачування
+  filePath      String          @unique // відносний шлях на диску
+  size          Int
+  price         String? // введена ціна (як текст)
+  currency      String?
+  warnings      String? // попередження від ШІ (JSON-масив рядків)
+  byUserId      String?
+  byUser        User?           @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([equipmentType, createdAt])
 }
