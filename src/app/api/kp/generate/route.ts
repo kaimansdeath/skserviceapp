@@ -39,7 +39,9 @@ export async function POST(req: NextRequest) {
     if (!TYPES.has(equipmentType)) return NextResponse.json({ error: "BAD_TYPE", stage }, { status: 400 });
     if (!machineName) return NextResponse.json({ error: "NO_NAME", stage }, { status: 400 });
 
-    const rawFiles = fd.getAll("files").filter((f): f is File => f instanceof File);
+    // На Node 18 глобального класу File немає (з'явився у Node 20) — перевіряємо за типом,
+    // як в інших роутах застосунку, інакше отримуємо ReferenceError: File is not defined
+    const rawFiles = fd.getAll("files").filter((f): f is File => typeof f !== "string");
     if (rawFiles.length === 0) return NextResponse.json({ error: "NO_FILES", stage }, { status: 400 });
     if (rawFiles.length > MAX_FILES) return NextResponse.json({ error: "TOO_MANY_FILES", stage }, { status: 400 });
 

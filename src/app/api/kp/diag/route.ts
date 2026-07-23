@@ -61,8 +61,9 @@ export async function GET() {
     return typeof m.extractRawText === "function" ? "OK" : "ПОМИЛКА: немає extractRawText";
   });
   libs["image-size"] = await safe(async () => {
-    const m = await import("image-size");
-    return typeof m.imageSize === "function" ? "OK" : "ПОМИЛКА: немає imageSize";
+    const m = (await import("image-size")) as unknown as Record<string, unknown>;
+    const fn = m.imageSize ?? (m.default as Record<string, unknown> | undefined)?.imageSize ?? m.default;
+    return typeof fn === "function" ? "OK" : "ПОМИЛКА: немає imageSize";
   });
   libs.exceljs = await safe(async () => {
     const m = await import("exceljs");
