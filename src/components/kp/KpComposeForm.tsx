@@ -120,8 +120,9 @@ export default function KpComposeForm({ onGenerated }: { onGenerated: () => void
       }
       if (!res.ok) {
         const code = typeof data.error === "string" ? data.error : "UNKNOWN";
+        const stage = typeof data.stage === "string" ? ` · стадія: ${data.stage}` : "";
         setError(errorText(code, t));
-        setDetail(`HTTP ${res.status} · ${String(data.detail ?? code).slice(0, 400)}`);
+        setDetail(`HTTP ${res.status}${stage} · ${String(data.detail ?? code).slice(0, 500)}`);
         return;
       }
       setResult({
@@ -314,6 +315,7 @@ function errorText(code: string, t: ReturnType<typeof useTranslations<"kp">>): s
   if (code === "NO_NAME") return t("errNoName");
   if (code === "NO_FILES" || code === "NO_READABLE_INPUT") return t("errNoFiles");
   if (code === "FILE_TOO_BIG") return t("errFileTooBig");
+  if (code === "SERVER_ERROR") return t("errServer");
   if (code.startsWith("AI_")) return t("errAi");
   return t("errGeneric");
 }

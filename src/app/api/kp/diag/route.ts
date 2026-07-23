@@ -7,10 +7,12 @@ import { UPLOADS_DIR } from "@/lib/uploads";
 import { KP_ASSETS_DIR, KP_ASSET_FILES } from "@/lib/kp/constants";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Самодіагностика модуля КП: /api/kp/diag
- * Показує, що саме не налаштовано (ключ, таблиці, диск, ассети).
+ * Перевіряє ключ, таблиці, диск, ассети, бібліотеки і робить тестовий рендер DOCX
+ * (без звернення до ШІ) — щоб локалізувати збій без доступу до логів.
  */
 export async function GET() {
   const session = await auth();
@@ -19,56 +21,86 @@ export async function GET() {
 
   const checks: Record<string, unknown> = {};
 
-  checks.apiKey = process.env.ANTHROPIC_API_KEY ? "OK (задано)" : "ПОМИЛКА: ANTHROPIC_API_KEY не задано";
+  checks.apiKey = process.env.ANTHROPIC_API_KEY
+    ? `OK (задано, довжина ${process.env.ANTHROPIC_API_KEY.length})`
+    : "ПОМИЛКА: ANTHROPIC_API_KEY не задано";
   checks.model = process.env.ANTHROPIC_KP_MODEL || process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5 (за замовчуванням)";
+  checks.node = process.version;
+  checks.memoryMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
 
-  try {
-    const n = await prisma.kpDocument.count();
-    checks.dbKpDocument = `OK (записів: ${n})`;
-  } catch (e) {
-    checks.dbKpDocument = `ПОМИЛКА: ${(e as Error).message.slice(0, 200)}`;
-  }
-
-  try {
-    const n = await prisma.kpTemplate.count();
-    checks.dbKpTemplate = `OK (шаблонів: ${n})`;
-  } catch (e) {
-    checks.dbKpTemplate = `ПОМИЛКА: ${(e as Error).message.slice(0, 200)}`;
-  }
+  checks.dbKpDocument = await safe(async () => `OK (записів: ${await prisma.kpDocument.count()})`);
+  checks.dbKpTemplate = await safe(async () => `OK (шаблонів: ${await prisma.kpTemplate.count()})`);
 
   const dir = path.join(UPLOADS_DIR, "kp");
-  try {
+  checks.storage = await safe(async () => {
     await fs.mkdir(dir, { recursive: true });
     const probe = path.join(dir, `.probe_${Date.now()}`);
     await fs.writeFile(probe, "ok");
     await fs.unlink(probe);
-    checks.storage = `OK (запис у ${dir})`;
-  } catch (e) {
-    checks.storage = `ПОМИЛКА запису у ${dir}: ${(e as Error).message.slice(0, 200)}`;
-  }
+    return `OK (запис у ${dir})`;
+  });
 
   const assets: Record<string, string> = {};
   for (const [key, file] of Object.entries(KP_ASSET_FILES)) {
-    try {
+    assets[key] = await safe(async () => {
       const st = await fs.stat(path.join(KP_ASSETS_DIR, file));
-      assets[key] = `OK (${Math.round(st.size / 1024)} КБ)`;
-    } catch {
-      assets[key] = "не знайдено";
-    }
+      return `OK (${Math.round(st.size / 1024)} КБ)`;
+    });
   }
   checks.assetsDir = KP_ASSETS_DIR;
   checks.assets = assets;
 
+  // Завантаження бібліотек по одній
   const libs: Record<string, string> = {};
-  for (const name of ["docx", "mammoth", "image-size", "exceljs"]) {
-    try {
-      require(name);
-      libs[name] = "OK";
-    } catch (e) {
-      libs[name] = `ПОМИЛКА: ${(e as Error).message.slice(0, 150)}`;
-    }
-  }
+  libs.docx = await safe(async () => {
+    const m = await import("docx");
+    return typeof m.Document === "function" ? "OK" : "ПОМИЛКА: немає Document";
+  });
+  libs.mammoth = await safe(async () => {
+    const m = await import("mammoth");
+    return typeof m.extractRawText === "function" ? "OK" : "ПОМИЛКА: немає extractRawText";
+  });
+  libs["image-size"] = await safe(async () => {
+    const m = await import("image-size");
+    return typeof m.imageSize === "function" ? "OK" : "ПОМИЛКА: немає imageSize";
+  });
+  libs.exceljs = await safe(async () => {
+    const m = await import("exceljs");
+    return m ? "OK" : "ПОМИЛКА";
+  });
   checks.libs = libs;
 
+  // Тестовий рендер DOCX без ШІ
+  checks.testRender = await safe(async () => {
+    const { renderKpDocx } = await import("@/lib/kp/render");
+    const res = await renderKpDocx({
+      ai: {
+        fullName: "ТЕСТОВИЙ ВЕРСТАТ",
+        controlType: "CNC",
+        about: ["Тестовий опис."],
+        specs: [{ param: "Тест", unit: "мм", value: "100" }],
+        equipment: ["Тест"],
+        options: ["Тест"],
+        extraModels: [],
+        warnings: [],
+      },
+      machineName: "TEST",
+      price: "1000",
+      currency: "грн",
+      deliveryTerm: "тест",
+      photos: [],
+    });
+    return `OK (DOCX ${Math.round(res.buffer.length / 1024)} КБ, попереджень: ${res.warnings.length})`;
+  });
+
   return NextResponse.json(checks, { status: 200 });
+}
+
+async function safe(fn: () => Promise<string>): Promise<string> {
+  try {
+    return await fn();
+  } catch (e) {
+    const err = e as Error;
+    return `ПОМИЛКА: ${(err?.message || String(e)).slice(0, 300)}`;
+  }
 }
